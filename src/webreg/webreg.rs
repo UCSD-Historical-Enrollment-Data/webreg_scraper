@@ -61,6 +61,14 @@ impl<'a> WebRegWrapper<'a> {
         }
     }
 
+    /// Gets your current schedule.
+    ///
+    /// # Parameters
+    /// - `schedule_name`: The schedule that you want to get. If `None` is given, this will default
+    /// to your main schedule.
+    ///
+    /// # Returns
+    /// A vector containing the courses that you are enrolled in, or `None` if this isn't possible.
     pub async fn get_schedule(&self, schedule_name: Option<&str>) -> Option<Vec<ScheduledSection>> {
         let url = Url::parse_with_params(
             CURR_SCHEDULE,
