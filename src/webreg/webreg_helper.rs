@@ -39,7 +39,7 @@ pub fn parse_meeting_type_date(w_meeting: &WebRegMeeting) -> (&str, MeetingDay) 
         );
     }
 
-    assert_eq!(w_meeting.section_start_date, w_meeting.start_date);
+    // assert_eq!(w_meeting.section_start_date, w_meeting.start_date);
 
     let regular_meeting = w_meeting.meeting_type.trim();
     let day_code = w_meeting.day_code.trim();

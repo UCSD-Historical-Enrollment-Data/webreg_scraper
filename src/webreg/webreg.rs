@@ -159,7 +159,7 @@ impl<'a> WebRegWrapper<'a> {
                                 meeting_type: m.0.to_string(),
                                 meeting_days: m.1,
                                 building: webreg_meeting.bldg_code.trim().to_string(),
-                                room: webreg_meeting.bldg_code.trim().to_string(),
+                                room: webreg_meeting.room_code.trim().to_string(),
                             }],
                         });
 
