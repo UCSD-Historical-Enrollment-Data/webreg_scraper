@@ -84,3 +84,19 @@ pub fn parse_day_code(day_code_str: &str) -> String {
 
     s
 }
+
+/// Checks if this section is a useless section. A section is useless if it has a letter for the
+/// first part of the section code and a 5 or above for the second part of the code. For example,
+/// `A01` is not a useless section but `A50` is.
+///
+/// # Parameters
+/// - `section_code`: The section code.
+///
+/// # Returns
+/// Whether the section code that is given is useless.
+pub fn is_useless_section(section_code: &str) -> bool {
+    let sec_code = section_code.as_bytes();
+    sec_code[0].is_ascii_alphabetic()
+        && sec_code[1].is_ascii_digit()
+        && sec_code[1] as i32 - 48 >= 5
+}

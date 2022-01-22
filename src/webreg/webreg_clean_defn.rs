@@ -73,3 +73,60 @@ impl ToString for Meeting {
         )
     }
 }
+
+/// A section that is currently in your schedule. Note that this can either be a course that you
+/// are enrolled in, waitlisted for, or planned.
+#[derive(Debug, Clone, Serialize)]
+pub struct ScheduledSection {
+    pub section_number: i64,
+    pub subject_code: String,
+    pub course_code: String,
+    pub course_title: String,
+    pub section_code: String,
+    pub section_capacity: i64,
+    pub enrolled_count: i64,
+    pub grade_option: String,
+    pub instructor: String,
+    pub units: f32,
+    #[serde(rename = "enrolled_status")]
+    pub enrolled_status: EnrollmentStatus,
+    pub waitlist_ct: i64,
+    pub meetings: Vec<Meeting>,
+}
+
+impl ToString for ScheduledSection {
+    fn to_string(&self) -> String {
+        let status = match self.enrolled_status {
+            EnrollmentStatus::Enrolled => "Enrolled",
+            EnrollmentStatus::Waitlist(_) => "Waitlisted",
+            EnrollmentStatus::Planned => "Planned",
+        };
+
+        let mut s = format!(
+            "[{} / {}] {} ({} {}) with {} - {} ({} Units)\n",
+            self.section_code,
+            self.section_number,
+            self.course_title,
+            self.subject_code,
+            self.course_code,
+            self.instructor,
+            status,
+            self.units
+        );
+
+        for meeting in &self.meetings {
+            s.push_str(&*meeting.to_string());
+            s.push('\n');
+        }
+
+        s
+    }
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(untagged)]
+pub enum EnrollmentStatus {
+    Enrolled,
+    Waitlist(i64),
+    Planned,
+}
