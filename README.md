@@ -24,7 +24,7 @@ Below are some features that this wrapper has, along with what I plan on working
 - [ ] Prerequisite information.
 
 ### ii. General POST Requests
-- [ ] Changing grading option.
+- [x] Changing grading option.
 - [ ] Enrolling in, or dropping, a class.
 - [ ] Planning, or un-planning, a class.
 - [ ] Waitlisting a class.
@@ -33,6 +33,7 @@ Below are some features that this wrapper has, along with what I plan on working
 - [ ] Get appointment time.
 - [ ] Creating, or removing/renaming, a schedule.
 - [ ] Adding, or removing, an event from a schedule.
+- [x] Sending a confirmation email to yourself.
 
 ## Purpose
 There are a few reasons why I wanted to make this wrapper:
@@ -90,6 +91,8 @@ Let's suppose I was enrolled in the CSE 100 section described above (so I would 
 - A JSON object representing a final. So, this object would say that the final occurs on Mar. 16.
 
 So, if I had 4 classes each with a repeating MWF lecture, repeating one-day discussion, a midterm, and a final, I would have **28** separate elements that I would need to somehow group together.
+
+On one hand, the reason why I think they did this is so it's easier for them to display the course information on a calendar.
 
 As you can imagine, consistency isn't exactly something WebReg cares about. There's obviously a lot more that I can complain about, but I'll hold off on that for now.
 

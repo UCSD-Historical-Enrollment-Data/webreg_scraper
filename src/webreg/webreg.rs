@@ -7,18 +7,20 @@ use crate::webreg::webreg_helper;
 use crate::webreg::webreg_raw_defn::{ScheduledMeeting, WebRegMeeting, WebRegSearchResultItem};
 use reqwest::header::{COOKIE, USER_AGENT};
 use reqwest::Client;
+use serde_json::{json, Value};
 use std::cmp::max;
 use std::collections::{HashMap, HashSet, VecDeque};
 use url::Url;
 
 const MY_USER_AGENT: &str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, \
 like Gecko) Chrome/97.0.4692.71 Safari/537.36";
-
 const WEBREG_SEARCH: &str = "https://act.ucsd.edu/webreg2/svc/wradapter/secure/search-by-all?";
 const WEBREG_NAME_URL: &str = "https://act.ucsd.edu/webreg2/svc/wradapter/get-current-name";
 const COURSE_DATA: &str =
     "https://act.ucsd.edu/webreg2/svc/wradapter/secure/search-load-group-data?";
 const CURR_SCHEDULE: &str = "https://act.ucsd.edu/webreg2/svc/wradapter/secure/get-class?";
+const SEND_EMAIL: &str = "https://act.ucsd.edu/webreg2/svc/wradapter/secure/send-email";
+const CHANGE_ENROLL: &str = "https://act.ucsd.edu/webreg2/svc/wradapter/secure/change-enroll";
 
 pub struct WebRegWrapper<'a> {
     cookies: &'a str,
@@ -614,6 +616,115 @@ impl<'a> WebRegWrapper<'a> {
                 match text {
                     Err(_) => None,
                     Ok(t) => Some(serde_json::from_str(&t).unwrap_or(vec![])),
+                }
+            }
+        }
+    }
+
+    /// Sends an email to yourself using the same email that is used to confirm that you have
+    /// enrolled or waitlisted in a particular class. In other words, this will send an email
+    /// to you through the email NoReplyRegistrar@ucsd.edu.
+    ///
+    /// It is strongly recommended that this function not be abused.
+    ///
+    /// # Parameters
+    /// - `email_content`: The email to send.
+    ///
+    /// # Returns
+    /// `true` if the email was sent successfully and `false` otherwise.
+    pub async fn send_email_to_self(&self, email_content: &str) -> bool {
+        let params: HashMap<&str, &str> =
+            HashMap::from([("actionevent", email_content), ("termcode", self.term)]);
+
+        let res = self
+            .client
+            .post(SEND_EMAIL)
+            .form(&params)
+            .header(COOKIE, self.cookies)
+            .header(USER_AGENT, MY_USER_AGENT)
+            .send()
+            .await;
+
+        match res {
+            Err(_) => false,
+            Ok(r) => {
+                if !r.status().is_success() {
+                    false
+                } else {
+                    r.text().await.unwrap().contains("\"YES\"")
+                }
+            }
+        }
+    }
+
+    /// Changes the grading option for the class corresponding to the section number.
+    ///
+    /// # Parameters
+    /// - `section_number`: The section number corresponding to the class that you want to change
+    /// the grading option for.
+    /// - `new_grade_opt`: The new grading option. This must either be `L` (letter),
+    /// `P` (pass/no pass), or `S` (satisfactory/unsatisfactory).
+    ///
+    /// # Returns
+    /// `true` if the process succeeded or `false` otherwise.
+    pub async fn change_grading_option(&self, section_number: i64, new_grade_opt: &str) -> bool {
+        match new_grade_opt {
+            "L" | "P" | "S" => {}
+            _ => return false,
+        };
+
+        let poss_class = self
+            .get_schedule(None)
+            .await
+            .unwrap_or(vec![])
+            .into_iter()
+            .find(|x| x.section_number == section_number);
+
+        if poss_class.is_none() {
+            return false;
+        }
+
+        // don't care about previous poss_class
+        let poss_class = poss_class.unwrap();
+        let sec_id = poss_class.section_number.to_string();
+        let units = poss_class.units.to_string();
+
+        let params: HashMap<&str, &str> = HashMap::from([
+            ("section", &*sec_id),
+            ("subjCode", ""),
+            ("crseCode", ""),
+            ("unit", &*units),
+            ("grade", new_grade_opt),
+            // You don't actually need these
+            ("oldGrade", ""),
+            ("oldUnit", ""),
+            ("termcode", self.term),
+        ]);
+
+        let res = self
+            .client
+            .post(CHANGE_ENROLL)
+            .form(&params)
+            .header(COOKIE, self.cookies)
+            .header(USER_AGENT, MY_USER_AGENT)
+            .send()
+            .await;
+
+        match res {
+            Err(_) => false,
+            Ok(r) => {
+                if !r.status().is_success() {
+                    false
+                } else {
+                    let text = r.text().await.unwrap_or(
+                        json!({
+                            "OPS": "FAIL"
+                        })
+                        .to_string(),
+                    );
+
+                    let json: Value = serde_json::from_str(&text).unwrap();
+                    json["OPS"].is_string() && json["OPS"].as_str().unwrap() == "SUCCESS"
                 }
             }
         }

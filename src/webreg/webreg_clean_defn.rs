@@ -103,7 +103,7 @@ impl ToString for ScheduledSection {
         };
 
         let mut s = format!(
-            "[{} / {}] {} ({} {}) with {} - {} ({} Units)\n",
+            "[{} / {}] {} ({} {}) with {} - {} ({} Units, {} Grading)\n",
             self.section_code,
             self.section_number,
             self.course_title,
@@ -111,7 +111,8 @@ impl ToString for ScheduledSection {
             self.course_code,
             self.instructor,
             status,
-            self.units
+            self.units,
+            self.grade_option
         );
 
         for meeting in &self.meetings {

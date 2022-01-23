@@ -25,5 +25,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
     for d in my_schedule {
         println!("{}", d.to_string());
     }
+
     Ok(())
 }
