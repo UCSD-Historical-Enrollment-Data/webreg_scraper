@@ -98,8 +98,8 @@ As you can imagine, consistency isn't exactly something WebReg cares about. Ther
 
 </details>
 
+## Disclaimer
+I am not responsible for any damages or other issue(s) caused by any use of this wrapper. In other words, by using this wrapper, I am not responsible if you somehow get in trouble or otherwise run into problems.
 
 ## License
 All code provided in this repository is licensed under the MIT license. 
-
-As a warning, any data obtained from WebReg may have a different license associated with it.

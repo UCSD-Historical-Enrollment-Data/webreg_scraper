@@ -14,8 +14,9 @@ use url::Url;
 
 const MY_USER_AGENT: &str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, \
 like Gecko) Chrome/97.0.4692.71 Safari/537.36";
+const WEBREG_BASE: &str = "https://act.ucsd.edu/webreg2";
 const WEBREG_SEARCH: &str = "https://act.ucsd.edu/webreg2/svc/wradapter/secure/search-by-all?";
-const WEBREG_NAME_URL: &str = "https://act.ucsd.edu/webreg2/svc/wradapter/get-current-name";
+const ACC_NAME: &str = "https://act.ucsd.edu/webreg2/svc/wradapter/get-current-name";
 const COURSE_DATA: &str =
     "https://act.ucsd.edu/webreg2/svc/wradapter/secure/search-load-group-data?";
 const CURR_SCHEDULE: &str = "https://act.ucsd.edu/webreg2/svc/wradapter/secure/get-class?";
@@ -44,14 +45,19 @@ impl<'a> WebRegWrapper<'a> {
         }
     }
 
-    /// Checks if the current WebReg instance is valid. Doesn't actually work.
+    #[inline(always)]
+    fn internal_is_valid(&self, str: &str) -> bool {
+        !str.contains("Skip to main content")
+    }
+
+    /// Checks if the current WebReg instance is valid.
     ///
     /// # Returns
     /// `true` if the instance is valid and `false` otherwise.
     pub async fn is_valid(&self) -> bool {
         let res = self
             .client
-            .get(WEBREG_NAME_URL)
+            .get(WEBREG_BASE)
             .header(COOKIE, self.cookies)
             .header(USER_AGENT, MY_USER_AGENT)
             .send()
@@ -59,7 +65,33 @@ impl<'a> WebRegWrapper<'a> {
 
         match res {
             Err(_) => false,
-            Ok(r) => r.status().is_success(),
+            Ok(r) => self.internal_is_valid(&r.text().await.unwrap()),
+        }
+    }
+
+    /// Gets the name of the owner associated with this account.
+    ///
+    /// # Returns
+    /// The name of the person, or an empty string if the cookies that were given were invalid.
+    pub async fn get_account_name(&self) -> String {
+        let res = self
+            .client
+            .get(ACC_NAME)
+            .header(COOKIE, self.cookies)
+            .header(USER_AGENT, MY_USER_AGENT)
+            .send()
+            .await;
+
+        match res {
+            Err(_) => "".to_string(),
+            Ok(r) => {
+                let name = r.text().await.unwrap();
+                if self.internal_is_valid(&name) {
+                    name
+                } else {
+                    "".to_string()
+                }
+            }
         }
     }
 
