@@ -24,6 +24,18 @@ pub struct WebRegSearchResultItem {
     course_code: String,
 }
 
+impl ToString for WebRegSearchResultItem {
+    fn to_string(&self) -> String {
+        format!(
+            "[{} {}] {} ({})",
+            self.subj_code.trim(),
+            self.course_code.trim(),
+            self.course_title.trim(),
+            self.max_units
+        )
+    }
+}
+
 /// A meeting. Note that this doesn't represent a class by itself, but rather a "piece" of that
 /// class. For example, one `WebRegMeeting` can represent a discussion while another can
 /// represent a lecture.

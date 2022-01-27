@@ -14,6 +14,8 @@ use url::Url;
 
 const MY_USER_AGENT: &str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, \
 like Gecko) Chrome/97.0.4692.71 Safari/537.36";
+
+// Random WebReg links
 const WEBREG_BASE: &str = "https://act.ucsd.edu/webreg2";
 const WEBREG_SEARCH: &str = "https://act.ucsd.edu/webreg2/svc/wradapter/secure/search-by-all?";
 const ACC_NAME: &str = "https://act.ucsd.edu/webreg2/svc/wradapter/get-current-name";
@@ -23,6 +25,7 @@ const CURR_SCHEDULE: &str = "https://act.ucsd.edu/webreg2/svc/wradapter/secure/g
 const SEND_EMAIL: &str = "https://act.ucsd.edu/webreg2/svc/wradapter/secure/send-email";
 const CHANGE_ENROLL: &str = "https://act.ucsd.edu/webreg2/svc/wradapter/secure/change-enroll";
 
+/// A wrapper for [UCSD's WebReg](https://act.ucsd.edu/webreg2/start).
 pub struct WebRegWrapper<'a> {
     cookies: &'a str,
     client: Client,
@@ -48,6 +51,25 @@ impl<'a> WebRegWrapper<'a> {
     #[inline(always)]
     fn internal_is_valid(&self, str: &str) -> bool {
         !str.contains("Skip to main content")
+    }
+
+    #[inline]
+    fn get_formatted_course_code(&self, course_code: &str) -> String {
+        // If the course code only has 1 digit (excluding any letters), then we need to prepend 2
+        // spaces to the course code.
+        //
+        // If the course code has 2 digits (excluding any letters), then we need to prepend 1
+        // space to the course code.
+        //
+        // Otherwise, don't need to prepend any spaces to the course code.
+        //
+        // For now, assume that no digits will ever appear *after* the letters. Weird thing is that
+        // WebReg uses '+' to offset the course code but spaces are accepted.
+        match course_code.chars().filter(|x| x.is_ascii_digit()).count() {
+            1 => format!("  {}", course_code),
+            2 => format!(" {}", course_code),
+            _ => course_code.to_string(),
+        }
     }
 
     /// Checks if the current WebReg instance is valid.
@@ -360,23 +382,7 @@ impl<'a> WebRegWrapper<'a> {
         subject_code: &str,
         course_code: &str,
     ) -> Option<Vec<CourseSection>> {
-        // If the course code only has 1 digit (excluding any letters), then we need to prepend 2
-        // spaces to the course code.
-        //
-        // If the course code has 2 digits (excluding any letters), then we need to prepend 1
-        // space to the course code.
-        //
-        // Otherwise, don't need to prepend any spaces to the course code.
-        //
-        // For now, assume that no digits will ever appear *after* the letters. Weird thing is that
-        // WebReg uses '+' to offset the course code but spaces are accepted.
-
-        let crsc_code = match course_code.chars().filter(|x| x.is_ascii_digit()).count() {
-            1 => format!("  {}", course_code),
-            2 => format!(" {}", course_code),
-            _ => course_code.to_string(),
-        };
-
+        let crsc_code = self.get_formatted_course_code(course_code);
         let url = Url::parse_with_params(
             COURSE_DATA,
             &[
@@ -605,23 +611,119 @@ impl<'a> WebRegWrapper<'a> {
     /// menu. Thus, only basic details are shown.
     ///
     /// # Parameters
-    /// - `only_open`: Whether to only show open courses.
+    /// - `request_filter`: The request filter.
     ///
     /// # Returns
     /// A vector consisting of all courses that are available.
-    pub async fn get_all_courses(&self, only_open: bool) -> Option<Vec<WebRegSearchResultItem>> {
+    pub async fn search_courses(
+        &self,
+        request_filter: SearchRequestBuilder<'a>,
+    ) -> Option<Vec<WebRegSearchResultItem>> {
+        let subject_code = if request_filter.subjects.is_empty() {
+            "".to_string()
+        } else {
+            request_filter.subjects.join(":")
+        };
+
+        let course_code = if request_filter.courses.is_empty() {
+            "".to_string()
+        } else {
+            // This can probably be made significantly more efficient
+            request_filter
+                .courses
+                .into_iter()
+                .map(|x| x.split_whitespace().collect::<Vec<_>>())
+                .collect::<Vec<_>>()
+                .into_iter()
+                .map(|course| {
+                    course
+                        .into_iter()
+                        .map(|x| self.get_formatted_course_code(x))
+                        .collect::<Vec<_>>()
+                        .join(":")
+                })
+                .collect::<Vec<_>>()
+                .join(";")
+                .to_uppercase()
+        };
+
+        let department = if request_filter.departments.is_empty() {
+            "".to_string()
+        } else {
+            request_filter.departments.join(":")
+        };
+
+        let professor = match request_filter.instructor {
+            Some(r) => r.to_uppercase(),
+            None => "".to_string(),
+        };
+
+        let title = match request_filter.title {
+            Some(r) => r.to_uppercase(),
+            None => "".to_string(),
+        };
+
+        let levels = if request_filter.level_filter == 0 {
+            "".to_string()
+        } else {
+            // Needs to be exactly 12 digits
+            let mut s = format!("{:b}", request_filter.level_filter);
+            while s.len() < 12 {
+                s.insert(0, '0');
+            }
+
+            s
+        };
+
+        let days = if request_filter.days == 0 {
+            "".to_string()
+        } else {
+            // Needs to be exactly 7 digits
+            let mut s = format!("{:b}", request_filter.days);
+            while s.len() < 7 {
+                s.insert(0, '0');
+            }
+
+            s
+        };
+
+        let time_str = {
+            if request_filter.start_time.is_none() && request_filter.end_time.is_none() {
+                "".to_string()
+            } else {
+                let start_time = match request_filter.start_time {
+                    Some((h, m)) => format!("{:0>2}{:0>2}", h, m),
+                    None => "".to_string(),
+                };
+
+                let end_time = match request_filter.end_time {
+                    Some((h, m)) => format!("{:0>2}{:0>2}", h, m),
+                    None => "".to_string(),
+                };
+
+                format!("{}:{}", start_time, end_time)
+            }
+        };
+
         let url = Url::parse_with_params(
             WEBREG_SEARCH,
             &[
-                ("subjcode", ""),
-                ("crsecode", ""),
-                ("department", ""),
-                ("professor", ""),
-                ("title", ""),
-                ("levels", ""),
-                ("days", ""),
-                ("timestr", ""),
-                ("opensection", if only_open { "true" } else { "false" }),
+                ("subjcode", &*subject_code),
+                ("crsecode", &*course_code),
+                ("department", &*department),
+                ("professor", &*professor),
+                ("title", &*title),
+                ("levels", &*levels),
+                ("days", &*days),
+                ("timestr", &*time_str),
+                (
+                    "opensection",
+                    if request_filter.only_open {
+                        "true"
+                    } else {
+                        "false"
+                    },
+                ),
                 ("isbasic", "true"),
                 ("basicsearchvalue", ""),
                 ("termcode", self.term),
@@ -763,8 +865,239 @@ impl<'a> WebRegWrapper<'a> {
     }
 }
 
+// Helper structure for organizing meetings. Only used once for now.
 struct GroupedSection<'a, T> {
     main_meeting: &'a T,
     child_meetings: Vec<&'a T>,
     other_special_meetings: Vec<&'a T>,
+}
+
+/// Used to construct search requests for the `search_courses` function.
+pub struct SearchRequestBuilder<'a> {
+    subjects: Vec<&'a str>,
+    courses: Vec<&'a str>,
+    departments: Vec<&'a str>,
+    instructor: Option<&'a str>,
+    title: Option<&'a str>,
+    level_filter: u32,
+    days: u32,
+    start_time: Option<(u32, u32)>,
+    end_time: Option<(u32, u32)>,
+    only_open: bool,
+}
+
+impl<'a> SearchRequestBuilder<'a> {
+    /// Creates a new instance of the `SearchRequestBuilder`, which is used to search for specific
+    /// courses.
+    ///
+    /// # Returns
+    /// The empty `SearchRequestBuilder`.
+    pub fn new() -> Self {
+        Self {
+            subjects: vec![],
+            courses: vec![],
+            departments: vec![],
+            instructor: None,
+            title: None,
+            level_filter: 0,
+            days: 0,
+            start_time: None,
+            end_time: None,
+            only_open: false,
+        }
+    }
+
+    /// Adds a subject to this search request. Valid search requests are uppercase and at most
+    /// 4 characters long. Some examples include `MATH` or `CSE`.
+    ///
+    /// # Parameters
+    /// - `subject`: The subject.
+    ///
+    /// # Returns
+    /// The `SearchRequestBuilder`
+    pub fn add_subject(mut self, subject: &'a str) -> Self {
+        if subject != subject.to_uppercase() || subject.len() > 4 {
+            return self;
+        }
+
+        self.subjects.push(subject);
+        self
+    }
+
+    // TODO need to append '+' to course as needed
+    /// Adds a course (either a subject code, course code, or both) to the search request. Some
+    /// examples include `20E`, `math 20d`, `101`, `CSE`.
+    ///
+    /// # Parameters
+    /// - `course`: The course.
+    ///
+    /// # Returns
+    /// The `SearchRequestBuilder`
+    pub fn add_course(mut self, course: &'a str) -> Self {
+        self.courses.push(course);
+        self
+    }
+
+    /// Adds a department to the search request. Valid search requests are uppercase and at most 4
+    /// characters long. Some examples include `MATH` or `CSE`.
+    ///
+    /// # Parameters
+    /// - `department`: The department.
+    ///
+    /// # Returns
+    /// The `SearchRequestBuilder`
+    pub fn add_department(mut self, department: &'a str) -> Self {
+        if department != department.to_uppercase() || department.len() > 4 {
+            return self;
+        }
+
+        self.departments.push(department);
+        self
+    }
+
+    /// Sets the instructor to the specified instructor.
+    ///
+    /// # Parameters
+    /// - `instructor`: The instructor. This should be formatted in `Last Name, First Name` form.
+    ///
+    /// # Returns
+    /// The `SearchRequestBuilder`
+    pub fn set_instructor(mut self, instructor: &'a str) -> Self {
+        self.instructor = Some(instructor);
+        self
+    }
+
+    /// Sets the course title to the specified title. Some examples could be `differential equ`,
+    /// `data structures`, `algorithms`, and so on.
+    ///
+    /// # Parameters
+    /// - `title`: The title of the course.
+    ///
+    /// # Returns
+    /// The `SearchRequestBuilder`
+    pub fn set_title(mut self, title: &'a str) -> Self {
+        self.title = Some(title);
+        self
+    }
+
+    /// Restrict search results to to the specified filter. This can be applied multiple times.
+    ///
+    /// # Parameters
+    /// - `filter`: The filter.
+    ///
+    /// # Returns
+    /// The `SearchRequestBuilder`
+    pub fn filter_courses_by(mut self, filter: CourseLevelFilter) -> Self {
+        self.level_filter |= match filter {
+            CourseLevelFilter::LowerDivision => 1 << 11,
+            CourseLevelFilter::FreshmenSeminar => 1 << 10,
+            CourseLevelFilter::LowerDivisionIndepStudy => 1 << 9,
+            CourseLevelFilter::UpperDivision => 1 << 8,
+            CourseLevelFilter::Apprenticeship => 1 << 7,
+            CourseLevelFilter::UpperDivisionIndepStudy => 1 << 6,
+            CourseLevelFilter::Graduate => 1 << 5,
+            CourseLevelFilter::GraduateIndepStudy => 1 << 4,
+            CourseLevelFilter::GraduateResearch => 1 << 3,
+            CourseLevelFilter::Lvl300 => 1 << 2,
+            CourseLevelFilter::Lvl400 => 1 << 1,
+            CourseLevelFilter::Lvl500 => 1 << 0,
+        };
+
+        self
+    }
+
+    /// Only shows courses based on the specified day(s).
+    ///
+    /// # Parameters
+    /// - `day`: The day. Here:
+    ///     - Monday is represented as `1`
+    ///     - Tuesday is represented as `2`
+    ///     - ...
+    ///     - Saturday is represented as `6`
+    ///     - Sunday is represented as `7`.
+    ///
+    /// # Returns
+    /// The `SearchRequestBuilder`
+    pub fn apply_days(mut self, day: u32) -> Self {
+        if day > 7 || day < 1 {
+            return self;
+        }
+
+        // Monday = 1
+        // Tuesday = 2
+        // ...
+        // Sunday = 7
+        self.days |= 1 << (7 - day);
+        self
+    }
+
+    /// Sets the start time to the specified time.
+    ///
+    /// # Parameters
+    /// - `hour`: The hour. This should be between 0 and 23, inclusive.
+    /// - `min`: The minute. This should be between 0 and 59, inclusive.
+    ///
+    /// # Returns
+    /// The `SearchRequestBuilder`
+    pub fn set_start_time(mut self, hour: u32, min: u32) -> Self {
+        if hour > 23 || min > 59 {
+            return self;
+        }
+
+        self.start_time = Some((hour, min));
+        self
+    }
+
+    /// Sets the end time to the specified time.
+    ///
+    /// # Parameters
+    /// - `hour`: The hour. This should be between 0 and 23, inclusive.
+    /// - `min`: The minute. This should be between 0 and 59, inclusive.
+    ///
+    /// # Returns
+    /// The `SearchRequestBuilder`
+    pub fn set_end_time(mut self, hour: u32, min: u32) -> Self {
+        if hour > 23 || min > 59 {
+            return self;
+        }
+
+        self.end_time = Some((hour, min));
+        self
+    }
+
+    /// Whether to only show sections with open seats.
+    ///
+    /// # Returns
+    /// The `SearchRequestBuilder`
+    pub fn only_allow_open(mut self) -> Self {
+        self.only_open = true;
+        self
+    }
+}
+
+pub enum CourseLevelFilter {
+    /// Level 1-99 courses.
+    LowerDivision,
+    /// Level 87, 90 courses.
+    FreshmenSeminar,
+    /// Level 99 courses.
+    LowerDivisionIndepStudy,
+    /// Level 100-198 courses
+    UpperDivision,
+    /// Level 195 courses
+    Apprenticeship,
+    /// Level 199 courses
+    UpperDivisionIndepStudy,
+    /// Level 200-297 courses
+    Graduate,
+    /// Level 298 courses
+    GraduateIndepStudy,
+    /// Level 299 courses
+    GraduateResearch,
+    /// Level 300+ courses
+    Lvl300,
+    /// Level 400+ courses
+    Lvl400,
+    /// Level 500+ courses
+    Lvl500,
 }

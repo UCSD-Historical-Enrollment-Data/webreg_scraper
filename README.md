@@ -17,7 +17,7 @@ Below are some features that this wrapper has, along with what I plan on working
 
 ### i. General GET Requests
 - [x] Get all possible classes in the quarter.
-- [ ] Searching for classes based on some conditions (Advanced Search).
+- [x] Searching for classes based on some conditions (Advanced Search).
 - [x] Get detailed information about a specific class (like number of students enrolled, section times, etc.)
 - [x] Getting your current schedule.
 - [ ] Ability to get detailed information for a wide range of classes.

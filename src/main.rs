@@ -1,5 +1,5 @@
 mod webreg;
-use crate::webreg::webreg::WebRegWrapper;
+use crate::webreg::webreg::{SearchRequestBuilder, WebRegWrapper};
 use std::error::Error;
 
 const COOKIE: &str = include_str!("../cookie.txt");
@@ -33,6 +33,26 @@ async fn main() -> Result<(), Box<dyn Error>> {
     println!("{} possible sections found.", courses.len());
     for d in courses {
         println!("{}", d.to_string())
+    }
+
+    println!();
+
+    // Search stuff.
+    let search_res = w
+        .search_courses(
+            SearchRequestBuilder::new()
+                .add_course("poli 28")
+                .add_course("cse 130")
+                .add_course("cogs 1")
+                .add_course("math 183")
+                .add_course("math 180a")
+                .add_course("cse 8b"),
+        )
+        .await
+        .unwrap();
+    println!("Found {} courses!", search_res.len());
+    for x in search_res {
+        println!("{}", x.to_string());
     }
 
     Ok(())
