@@ -480,8 +480,6 @@ impl<'a> WebRegWrapper<'a> {
                     .map(|x| &*x.sect_code)
                     .collect::<VecDeque<_>>();
 
-                assert!(!sec_main_ids.is_empty());
-
                 let mut seen: HashSet<&str> = HashSet::new();
                 while !sec_main_ids.is_empty() {
                     let main_id = sec_main_ids.pop_front().unwrap();
@@ -493,7 +491,10 @@ impl<'a> WebRegWrapper<'a> {
                     let letter = main_id.chars().into_iter().next().unwrap();
                     let idx_of_main = unprocessed_sections
                         .iter()
-                        .position(|x| x.sect_code == main_id && x.special_meeting.trim().is_empty())
+                        .position(|x| {
+                            x.sect_code == main_id
+                                && x.special_meeting.replace("TBA", "").trim().is_empty()
+                        })
                         .expect("This should not have happened!");
 
                     let mut group = GroupedSection {
@@ -510,14 +511,15 @@ impl<'a> WebRegWrapper<'a> {
                         .filter(|x| x.sect_code.starts_with(letter))
                         .for_each(|x| {
                             // Don't count this again
-                            if x.sect_code == main_id && x.special_meeting.trim().is_empty() {
+                            let special_meeting = x.special_meeting.replace("TBA", "");
+                            if x.sect_code == main_id && special_meeting.trim().is_empty() {
                                 return;
                             }
 
-                            let special_meeting = x.special_meeting.trim();
-
                             // Probably a discussion
-                            if x.start_date == x.section_start_date && special_meeting.is_empty() {
+                            if x.start_date == x.section_start_date
+                                && special_meeting.trim().is_empty()
+                            {
                                 group.child_meetings.push(x);
                                 return;
                             }
@@ -563,6 +565,34 @@ impl<'a> WebRegWrapper<'a> {
                         })
                         .collect::<Vec<_>>();
 
+                    // It's possible that there are no discussions, just a lecture
+                    if group.child_meetings.is_empty() {
+                        let mut all_meetings: Vec<Meeting> = vec![main_meeting.clone()];
+
+                        other_meetings
+                            .iter()
+                            .for_each(|x| all_meetings.push(x.clone()));
+
+                        sections.push(CourseSection {
+                            section_id: group.main_meeting.section_number.trim().to_string(),
+                            section_code: group.main_meeting.sect_code.trim().to_string(),
+                            instructor: group
+                                .main_meeting
+                                .person_full_name
+                                .split_once(';')
+                                .unwrap()
+                                .0
+                                .trim()
+                                .to_string(),
+                            available_seats: max(group.main_meeting.avail_seat, 0),
+                            total_seats: group.main_meeting.section_capacity,
+                            waitlist_ct: group.main_meeting.count_on_waitlist,
+                            meetings: other_meetings,
+                        });
+
+                        continue;
+                    }
+
                     // Hopefully these are discussions
                     for meeting in group.child_meetings {
                         let (m_type, t_m_dats) = webreg_helper::parse_meeting_type_date(meeting);
@@ -605,6 +635,41 @@ impl<'a> WebRegWrapper<'a> {
                 Some(sections)
             }
         }
+    }
+
+    /// Gets all courses that are available. This searches for all courses via Webreg's menu, but
+    /// then also searches each course found for specific details. This essentially calls the two
+    /// functions `search_courses` and `get_course_info`.
+    ///
+    /// Note: This function call will make *many* API requests. Thus, searching for many classes
+    /// is not recommended as you may get rate-limited.
+    ///
+    /// # Parameters
+    /// - `request_filter`: The request filter.
+    ///
+    /// # Returns
+    /// A vector consisting of all courses that are available, with detailed information.
+    pub async fn search_courses_detailed(
+        &self,
+        request_filter: SearchRequestBuilder<'a>,
+    ) -> Option<Vec<CourseSection>> {
+        let search_res = match self.search_courses(request_filter).await {
+            Some(r) => r,
+            None => return None,
+        };
+
+        let mut vec: Vec<CourseSection> = vec![];
+        for r in search_res {
+            let req_res = self
+                .get_course_info(r.subj_code.trim(), r.course_code.trim())
+                .await;
+            match req_res {
+                Some(r) => r.into_iter().for_each(|x| vec.push(x)),
+                None => break,
+            };
+        }
+
+        Some(vec)
     }
 
     /// Gets all courses that are available. All this does is searches for all courses via Webreg's
@@ -866,6 +931,7 @@ impl<'a> WebRegWrapper<'a> {
 }
 
 // Helper structure for organizing meetings. Only used once for now.
+#[derive(Debug)]
 struct GroupedSection<'a, T> {
     main_meeting: &'a T,
     child_meetings: Vec<&'a T>,

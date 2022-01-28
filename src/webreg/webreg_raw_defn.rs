@@ -9,7 +9,7 @@ pub struct WebRegSearchResultItem {
 
     /// The subject code. For example, `CSE` or `MATH` are both possible option.
     #[serde(rename = "SUBJ_CODE")]
-    subj_code: String,
+    pub subj_code: String,
 
     /// The course title. For example, `Abstract Algebra II`.
     #[serde(rename = "CRSE_TITLE")]
@@ -21,7 +21,7 @@ pub struct WebRegSearchResultItem {
 
     /// The course code. For example, `100B`.
     #[serde(rename = "CRSE_CODE")]
-    course_code: String,
+    pub course_code: String,
 }
 
 impl ToString for WebRegSearchResultItem {
@@ -129,7 +129,7 @@ pub struct WebRegMeeting {
 
     /// The date that this section officially starts.
     #[serde(rename = "SECTION_START_DATE")]
-    pub section_start_date: String
+    pub section_start_date: String,
 }
 
 /// A meeting that you have enrolled in.. Note that this doesn't represent a class by itself, but

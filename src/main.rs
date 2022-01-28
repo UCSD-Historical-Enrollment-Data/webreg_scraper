@@ -1,6 +1,7 @@
 mod webreg;
 use crate::webreg::webreg::{SearchRequestBuilder, WebRegWrapper};
 use std::error::Error;
+use std::time::Instant;
 
 const COOKIE: &str = include_str!("../cookie.txt");
 
@@ -15,6 +16,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     }
 
     println!("Account name: {}", w.get_account_name().await);
+    println!();
 
     // Get my schedule
     let my_schedule = w.get_schedule(None).await.unwrap();
@@ -23,6 +25,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         my_schedule.len(),
         my_schedule.iter().map(|x| x.units).sum::<f32>()
     );
+
     for d in my_schedule {
         println!("{}", d.to_string());
     }
@@ -38,22 +41,23 @@ async fn main() -> Result<(), Box<dyn Error>> {
     println!();
 
     // Search stuff.
+    let start = Instant::now();
     let search_res = w
-        .search_courses(
+        .search_courses_detailed(
             SearchRequestBuilder::new()
-                .add_course("poli 28")
-                .add_course("cse 130")
-                .add_course("cogs 1")
-                .add_course("math 183")
-                .add_course("math 180a")
-                .add_course("cse 8b"),
+                .add_course("MATH 20B")
+                .add_course("MATH 10B"),
         )
         .await
         .unwrap();
-    println!("Found {} courses!", search_res.len());
-    for x in search_res {
-        println!("{}", x.to_string());
-    }
+
+    let duration = start.elapsed();
+
+    println!(
+        "Found {} sections in {} seconds!",
+        search_res.len(),
+        duration.as_secs_f32()
+    );
 
     Ok(())
 }
