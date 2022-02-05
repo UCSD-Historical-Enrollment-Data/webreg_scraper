@@ -3,6 +3,7 @@ use serde::Serialize;
 /// A section, which consists of a lecture, usually a discussion, and usually a final.
 #[derive(Debug, Clone, Serialize)]
 pub struct CourseSection {
+    pub course_dept_id: String,
     pub section_id: String,
     pub section_code: String,
     pub instructor: String,
@@ -15,7 +16,8 @@ pub struct CourseSection {
 impl ToString for CourseSection {
     fn to_string(&self) -> String {
         let mut s = format!(
-            "[{} / {}] {}: {}/{} (WL: {})\n",
+            "[{}] [{} / {}] {}: {}/{} (WL: {})\n",
+            self.course_dept_id,
             self.section_code,
             self.section_id,
             self.instructor,

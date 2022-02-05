@@ -7,7 +7,7 @@ const COOKIE: &str = include_str!("../cookie.txt");
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<(), Box<dyn Error>> {
-    let w = WebRegWrapper::new(COOKIE, "WI22");
+    let w = WebRegWrapper::new(COOKIE, "SP22");
     let valid = w.is_valid().await;
     println!("Is valid? {}", valid);
 

@@ -413,6 +413,9 @@ impl<'a> WebRegWrapper<'a> {
                     return None;
                 }
 
+                let course_dept_id = format!(
+                    "{} {}", subject_code.trim(), course_code.trim()
+                ).to_uppercase();
                 let parsed: Vec<WebRegMeeting> = serde_json::from_str(&text).unwrap_or(vec![]);
 
                 // Process any "special" sections
@@ -428,6 +431,7 @@ impl<'a> WebRegWrapper<'a> {
                         let m = webreg_helper::parse_meeting_type_date(&webreg_meeting);
 
                         sections.push(CourseSection {
+                            course_dept_id: course_dept_id.clone(),
                             section_id: webreg_meeting.section_number.trim().to_string(),
                             section_code: webreg_meeting.sect_code.trim().to_string(),
                             instructor: webreg_meeting
@@ -574,6 +578,7 @@ impl<'a> WebRegWrapper<'a> {
                             .for_each(|x| all_meetings.push(x.clone()));
 
                         sections.push(CourseSection {
+                            course_dept_id: course_dept_id.clone(),
                             section_id: group.main_meeting.section_number.trim().to_string(),
                             section_code: group.main_meeting.sect_code.trim().to_string(),
                             instructor: group
@@ -615,6 +620,7 @@ impl<'a> WebRegWrapper<'a> {
                             .for_each(|x| all_meetings.push(x.clone()));
 
                         sections.push(CourseSection {
+                            course_dept_id: course_dept_id.clone(),
                             section_id: meeting.section_number.trim().to_string(),
                             section_code: meeting.sect_code.trim().to_string(),
                             instructor: meeting
