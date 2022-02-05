@@ -52,7 +52,7 @@ pub struct Meeting {
 #[derive(Debug, Clone, Serialize)]
 #[serde(untagged)]
 pub enum MeetingDay {
-    Repeated(String),
+    Repeated(Vec<String>),
     OneTime(String),
     None,
 }
@@ -60,9 +60,9 @@ pub enum MeetingDay {
 impl ToString for Meeting {
     fn to_string(&self) -> String {
         let meeting_days_display = match &self.meeting_days {
-            MeetingDay::Repeated(r) => r.as_str(),
-            MeetingDay::OneTime(r) => r.as_str(),
-            MeetingDay::None => "N/A",
+            MeetingDay::Repeated(r) => r.join("").to_string(),
+            MeetingDay::OneTime(r) => r.to_string(),
+            MeetingDay::None => "N/A".to_string(),
         };
 
         let time_range = format!(

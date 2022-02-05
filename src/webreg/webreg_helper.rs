@@ -63,21 +63,21 @@ pub fn parse_meeting_type_date(w_meeting: &WebRegMeeting) -> (&str, MeetingDay) 
 ///
 /// # Returns
 /// A string with the days of the week.
-pub fn parse_day_code(day_code_str: &str) -> String {
-    let mut s: String = String::new();
+pub fn parse_day_code(day_code_str: &str) -> Vec<String> {
+    let mut s = vec![];
     day_code_str.chars().for_each(|c| {
         if !c.is_numeric() {
             return;
         }
 
         match c {
-            '0' => s.push_str("Su"),
-            '1' => s.push_str("M"),
-            '2' => s.push_str("Tu"),
-            '3' => s.push_str("W"),
-            '4' => s.push_str("Th"),
-            '5' => s.push_str("F"),
-            '6' => s.push_str("Sa"),
+            '0' => s.push("Su".to_string()),
+            '1' => s.push("M".to_string()),
+            '2' => s.push("Tu".to_string()),
+            '3' => s.push("W".to_string()),
+            '4' => s.push("Th".to_string()),
+            '5' => s.push("F".to_string()),
+            '6' => s.push("Sa".to_string()),
             _ => {}
         };
     });

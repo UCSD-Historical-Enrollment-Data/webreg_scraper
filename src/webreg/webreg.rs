@@ -592,7 +592,7 @@ impl<'a> WebRegWrapper<'a> {
                             available_seats: max(group.main_meeting.avail_seat, 0),
                             total_seats: group.main_meeting.section_capacity,
                             waitlist_ct: group.main_meeting.count_on_waitlist,
-                            meetings: other_meetings,
+                            meetings: all_meetings,
                         });
 
                         continue;

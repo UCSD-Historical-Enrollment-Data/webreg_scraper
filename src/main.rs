@@ -1,4 +1,5 @@
 mod webreg;
+
 use crate::webreg::webreg::{SearchRequestBuilder, WebRegWrapper};
 use std::error::Error;
 use std::time::Instant;
@@ -31,14 +32,12 @@ async fn main() -> Result<(), Box<dyn Error>> {
     }
 
     // Get CSE 100 courses
-    let courses = w.get_course_info("CSE", "100").await.unwrap();
+    let courses = w.get_course_info("CSE", "95").await.unwrap();
 
     println!("{} possible sections found.", courses.len());
     for d in courses {
         println!("{}", d.to_string())
     }
-
-    println!();
 
     // Search stuff.
     let start = Instant::now();
