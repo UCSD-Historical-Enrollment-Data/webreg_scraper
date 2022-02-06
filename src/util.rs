@@ -5,6 +5,7 @@ use chrono::format::{DelayedFormat, StrftimeItems};
 /// # Returns
 /// The formatted time, e.g. `02/05 11:23:15 PM`
 #[inline]
+#[allow(dead_code)]
 pub fn get_pretty_time() -> DelayedFormat<StrftimeItems<'static>> {
     let time = chrono::offset::Local::now();
     time.format("%m/%d %I:%M:%S %p")
@@ -17,6 +18,7 @@ pub fn get_pretty_time() -> DelayedFormat<StrftimeItems<'static>> {
 /// # Returns
 /// The number of non-leap-milliseconds since January 1, 1970 UTC.
 #[inline]
+#[allow(dead_code)]
 pub fn get_epoch_time() -> i64 {
     chrono::offset::Local::now().timestamp_millis()
 }

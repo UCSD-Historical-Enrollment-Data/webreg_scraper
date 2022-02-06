@@ -1,6 +1,6 @@
-mod webreg;
 mod tracker;
 mod util;
+mod webreg;
 
 use crate::webreg::webreg::{SearchRequestBuilder, WebRegWrapper};
 use std::error::Error;
@@ -18,15 +18,21 @@ async fn main() -> Result<(), Box<dyn Error>> {
         return Ok(());
     }
 
-    println!("Logged in successfully. Account name: {}", w.get_account_name().await);
+    println!(
+        "Logged in successfully. Account name: {}",
+        w.get_account_name().await
+    );
     println!();
 
+    /*
     tracker::track::track_webreg_enrollment(
         &w,
         &SearchRequestBuilder::new()
             .add_subject("CSE")
             .add_subject("COGS")
-    ).await;
+    ).await;*/
+
+    basic_intro(&w).await;
 
     Ok(())
 }

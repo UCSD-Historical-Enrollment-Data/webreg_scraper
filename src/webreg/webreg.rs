@@ -6,7 +6,7 @@ use crate::webreg::webreg_clean_defn::{
 use crate::webreg::webreg_helper;
 use crate::webreg::webreg_raw_defn::{ScheduledMeeting, WebRegMeeting, WebRegSearchResultItem};
 use reqwest::header::{COOKIE, USER_AGENT};
-use reqwest::Client;
+use reqwest::{Client, Error, Response};
 use serde_json::{json, Value};
 use std::cmp::max;
 use std::collections::{HashMap, HashSet, VecDeque};
@@ -14,6 +14,8 @@ use url::Url;
 
 const MY_USER_AGENT: &str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, \
 like Gecko) Chrome/97.0.4692.71 Safari/537.36";
+
+const DEFAULT_SCHEDULE_NAME: &str = "My Schedule";
 
 // Random WebReg links
 const WEBREG_BASE: &str = "https://act.ucsd.edu/webreg2";
@@ -24,6 +26,9 @@ const COURSE_DATA: &str =
 const CURR_SCHEDULE: &str = "https://act.ucsd.edu/webreg2/svc/wradapter/secure/get-class?";
 const SEND_EMAIL: &str = "https://act.ucsd.edu/webreg2/svc/wradapter/secure/send-email";
 const CHANGE_ENROLL: &str = "https://act.ucsd.edu/webreg2/svc/wradapter/secure/change-enroll";
+const PLAN_ADD: &str = "https://act.ucsd.edu/webreg2/svc/wradapter/secure/plan-add";
+const PLAN_REMOVE: &str = "https://act.ucsd.edu/webreg2/svc/wradapter/secure/plan-remove";
+const PLAN_EDIT: &str = "https://act.ucsd.edu/webreg2/svc/wradapter/secure/edit-plan";
 
 /// A wrapper for [UCSD's WebReg](https://act.ucsd.edu/webreg2/start).
 pub struct WebRegWrapper<'a> {
@@ -48,30 +53,6 @@ impl<'a> WebRegWrapper<'a> {
         }
     }
 
-    #[inline(always)]
-    fn internal_is_valid(&self, str: &str) -> bool {
-        !str.contains("Skip to main content")
-    }
-
-    #[inline]
-    fn get_formatted_course_code(&self, course_code: &str) -> String {
-        // If the course code only has 1 digit (excluding any letters), then we need to prepend 2
-        // spaces to the course code.
-        //
-        // If the course code has 2 digits (excluding any letters), then we need to prepend 1
-        // space to the course code.
-        //
-        // Otherwise, don't need to prepend any spaces to the course code.
-        //
-        // For now, assume that no digits will ever appear *after* the letters. Weird thing is that
-        // WebReg uses '+' to offset the course code but spaces are accepted.
-        match course_code.chars().filter(|x| x.is_ascii_digit()).count() {
-            1 => format!("  {}", course_code),
-            2 => format!(" {}", course_code),
-            _ => course_code.to_string(),
-        }
-    }
-
     /// Checks if the current WebReg instance is valid.
     ///
     /// # Returns
@@ -87,7 +68,7 @@ impl<'a> WebRegWrapper<'a> {
 
         match res {
             Err(_) => false,
-            Ok(r) => self.internal_is_valid(&r.text().await.unwrap()),
+            Ok(r) => self._internal_is_valid(&r.text().await.unwrap()),
         }
     }
 
@@ -108,7 +89,7 @@ impl<'a> WebRegWrapper<'a> {
             Err(_) => "".to_string(),
             Ok(r) => {
                 let name = r.text().await.unwrap();
-                if self.internal_is_valid(&name) {
+                if self._internal_is_valid(&name) {
                     name
                 } else {
                     "".to_string()
@@ -367,6 +348,11 @@ impl<'a> WebRegWrapper<'a> {
 
     /// Gets enrollment information on a particular course.
     ///
+    /// Note that WebReg provides this information in a way that makes it hard to use; in
+    /// particular, WebReg separates each lecture, discussion, final exam, etc. from each other.
+    /// This function attempts to figure out which lecture/discussion/final exam/etc. correspond
+    /// to which section.
+    ///
     /// # Parameters
     /// - `subject_code`: The subject code. For example, if you wanted to check `MATH 100B`, you
     /// would put `MATH`.
@@ -382,7 +368,7 @@ impl<'a> WebRegWrapper<'a> {
         subject_code: &str,
         course_code: &str,
     ) -> Option<Vec<CourseSection>> {
-        let crsc_code = self.get_formatted_course_code(course_code);
+        let crsc_code = self._get_formatted_course_code(course_code);
         let url = Url::parse_with_params(
             COURSE_DATA,
             &[
@@ -413,9 +399,8 @@ impl<'a> WebRegWrapper<'a> {
                     return None;
                 }
 
-                let course_dept_id = format!(
-                    "{} {}", subject_code.trim(), course_code.trim()
-                ).to_uppercase();
+                let course_dept_id =
+                    format!("{} {}", subject_code.trim(), course_code.trim()).to_uppercase();
                 let parsed: Vec<WebRegMeeting> = serde_json::from_str(&text).unwrap_or(vec![]);
 
                 // Process any "special" sections
@@ -707,7 +692,7 @@ impl<'a> WebRegWrapper<'a> {
                 .map(|course| {
                     course
                         .into_iter()
-                        .map(|x| self.get_formatted_course_code(x))
+                        .map(|x| self._get_formatted_course_code(x))
                         .collect::<Vec<_>>()
                         .join(":")
                 })
@@ -904,15 +889,130 @@ impl<'a> WebRegWrapper<'a> {
             ("termcode", self.term),
         ]);
 
-        let res = self
-            .client
-            .post(CHANGE_ENROLL)
-            .form(&params)
-            .header(COOKIE, self.cookies)
-            .header(USER_AGENT, MY_USER_AGENT)
-            .send()
-            .await;
+        self._process_response(
+            self.client
+                .post(CHANGE_ENROLL)
+                .form(&params)
+                .header(COOKIE, self.cookies)
+                .header(USER_AGENT, MY_USER_AGENT)
+                .send()
+                .await,
+        )
+        .await
+    }
 
+    /// Allows you to plan a course.
+    ///
+    /// # Parameters
+    /// - `plan_options`: Information for the course that you want to plan.
+    /// - `bypass_check`: Whether to bypass checking whether you are able to plan this class.
+    /// **WARNING:** setting this to `true` can cause issues. For example, when this is `true`, you
+    /// will be able to plan courses with more units than allowed (e.g. 42 units), set the grading
+    /// option to one that you are not allowed to use (e.g. S/U as an undergraduate), and only
+    /// enroll in specific components of a section (e.g. just the discussion section). Some of
+    /// these options can visually break WebReg (e.g. Remove/Enroll button will not appear).
+    ///
+    /// # Returns
+    /// `true` if the course was planned successfully and `false` otherwise.
+    pub async fn add_to_plan(&self, plan_options: PlanAdd<'_>, bypass_check: bool) -> bool {
+        let u = plan_options.unit_count.to_string();
+        let crsc_code = self._get_formatted_course_code(plan_options.course_code);
+
+        if !bypass_check {
+            // We need to call the edit endpoint first, or else we'll have issues where we don't
+            // actually enroll in every component of the course.
+            let params_edit: HashMap<&str, &str> = HashMap::from([
+                ("section", &*plan_options.section_number),
+                ("subjcode", &*plan_options.subject_code),
+                ("crsecode", &*crsc_code),
+                ("termcode", self.term),
+            ]);
+
+            let edit_resp = self
+                ._process_response(
+                    self.client
+                        .post(PLAN_EDIT)
+                        .form(&params_edit)
+                        .header(COOKIE, self.cookies)
+                        .header(USER_AGENT, MY_USER_AGENT)
+                        .send()
+                        .await,
+                )
+                .await;
+
+            if !edit_resp {
+                return false;
+            }
+        }
+
+        let params_add: HashMap<&str, &str> = HashMap::from([
+            ("subjcode", &*plan_options.subject_code),
+            ("crsecode", &*crsc_code),
+            ("sectnum", &*plan_options.section_number),
+            ("sectcode", &*plan_options.section_code),
+            ("unit", &*u),
+            (
+                "grade",
+                match plan_options.grading_option {
+                    Some(r) if r == "L" || r == "P" || r == "S" => r,
+                    _ => "L",
+                },
+            ),
+            ("termcode", self.term),
+            (
+                "schedname",
+                match plan_options.schedule_name {
+                    Some(r) => r,
+                    None => DEFAULT_SCHEDULE_NAME,
+                },
+            ),
+        ]);
+
+        self._process_response(
+            self.client
+                .post(PLAN_ADD)
+                .form(&params_add)
+                .header(COOKIE, self.cookies)
+                .header(USER_AGENT, MY_USER_AGENT)
+                .send()
+                .await,
+        )
+        .await
+    }
+
+    /// Allows you to unplan a course.
+    ///
+    /// # Parameters
+    /// - `section_num`: The section number.
+    /// - `schedule_name`: The schedule name where the course should be unplanned from.
+    ///
+    /// # Returns
+    /// `true` if the course was unplanned successfully and `false` otherwise.
+    pub async fn remove_from_plan(
+        &self,
+        section_num: &str,
+        schedule_name: Option<&'a str>,
+    ) -> bool {
+        let params: HashMap<&str, &str> = HashMap::from([
+            ("sectnum", section_num),
+            ("termcode", self.term),
+            ("schedname", schedule_name.unwrap_or(DEFAULT_SCHEDULE_NAME)),
+        ]);
+
+        self._process_response(
+            self.client
+                .post(PLAN_REMOVE)
+                .form(&params)
+                .header(COOKIE, self.cookies)
+                .header(USER_AGENT, MY_USER_AGENT)
+                .send()
+                .await,
+        )
+        .await
+    }
+
+    #[inline]
+    async fn _process_response(&self, res: Result<Response, Error>) -> bool {
         match res {
             Err(_) => false,
             Ok(r) => {
@@ -932,6 +1032,30 @@ impl<'a> WebRegWrapper<'a> {
             }
         }
     }
+
+    #[inline(always)]
+    fn _internal_is_valid(&self, str: &str) -> bool {
+        !str.contains("Skip to main content")
+    }
+
+    #[inline]
+    fn _get_formatted_course_code(&self, course_code: &str) -> String {
+        // If the course code only has 1 digit (excluding any letters), then we need to prepend 2
+        // spaces to the course code.
+        //
+        // If the course code has 2 digits (excluding any letters), then we need to prepend 1
+        // space to the course code.
+        //
+        // Otherwise, don't need to prepend any spaces to the course code.
+        //
+        // For now, assume that no digits will ever appear *after* the letters. Weird thing is that
+        // WebReg uses '+' to offset the course code but spaces are accepted.
+        match course_code.chars().filter(|x| x.is_ascii_digit()).count() {
+            1 => format!("  {}", course_code),
+            2 => format!(" {}", course_code),
+            _ => course_code.to_string(),
+        }
+    }
 }
 
 // Helper structure for organizing meetings. Only used once for now.
@@ -940,6 +1064,23 @@ struct GroupedSection<'a, T> {
     main_meeting: &'a T,
     child_meetings: Vec<&'a T>,
     other_special_meetings: Vec<&'a T>,
+}
+
+pub struct PlanAdd<'a> {
+    /// The subject code. For example, `CSE`.
+    pub subject_code: &'a str,
+    /// The course code. For example, `12`.
+    pub course_code: &'a str,
+    /// The section number. For example, `0123123`.
+    pub section_number: &'a str,
+    /// The section code. For example `A00`.
+    pub section_code: &'a str,
+    /// The grading option. Can either be L, P, or S.
+    pub grading_option: Option<&'a str>,
+    /// The schedule name.
+    pub schedule_name: Option<&'a str>,
+    /// The number of units.
+    pub unit_count: u8,
 }
 
 /// Used to construct search requests for the `search_courses` function.

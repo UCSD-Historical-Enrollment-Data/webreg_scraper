@@ -26,7 +26,7 @@ Below are some features that this wrapper has, along with what I plan on working
 ### ii. General POST Requests
 - [x] Changing grading option.
 - [ ] Enrolling in, or dropping, a class.
-- [ ] Planning, or un-planning, a class.
+- [x] Planning, or un-planning, a class.
 - [ ] Waitlisting a class.
 
 ### iii. Miscellaneous (Low-Priority)
