@@ -900,20 +900,20 @@ impl<'a> WebRegWrapper<'a> {
     ///
     /// # Parameters
     /// - `plan_options`: Information for the course that you want to plan.
-    /// - `bypass_check`: Whether to bypass checking whether you are able to plan this class.
-    /// **WARNING:** setting this to `true` can cause issues. For example, when this is `true`, you
-    /// will be able to plan courses with more units than allowed (e.g. 42 units), set the grading
-    /// option to one that you are not allowed to use (e.g. S/U as an undergraduate), and only
-    /// enroll in specific components of a section (e.g. just the discussion section). Some of
+    /// - `validate`: Whether to validate your planning of this course beforehand.
+    /// **WARNING:** setting this to `false` can cause issues. For example, when this is `false`,
+    /// you will be able to plan courses with more units than allowed (e.g. 42 units), set the
+    /// grading option to one that you are not allowed to use (e.g. S/U as an undergraduate), and
+    /// only enroll in specific components of a section (e.g. just the discussion section). Some of
     /// these options can visually break WebReg (e.g. Remove/Enroll button will not appear).
     ///
     /// # Returns
     /// `true` if the course was planned successfully and `false` otherwise.
-    pub async fn add_to_plan(&self, plan_options: PlanAdd<'_>, bypass_check: bool) -> bool {
+    pub async fn add_to_plan(&self, plan_options: PlanAdd<'_>, validate: bool) -> bool {
         let u = plan_options.unit_count.to_string();
         let crsc_code = self._get_formatted_course_code(plan_options.course_code);
 
-        if bypass_check {
+        if validate {
             // We need to call the edit endpoint first, or else we'll have issues where we don't
             // actually enroll in every component of the course.
             let params_edit: HashMap<&str, &str> = HashMap::from([
