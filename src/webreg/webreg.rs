@@ -659,7 +659,7 @@ impl<'a> WebRegWrapper<'a> {
         &self,
         request_filter: SearchRequestBuilder<'a>,
     ) -> Option<Vec<CourseSection>> {
-        let search_res = match self.search_courses(request_filter).await {
+        let search_res = match self.search_courses(&request_filter).await {
             Some(r) => r,
             None => return None,
         };
@@ -688,7 +688,7 @@ impl<'a> WebRegWrapper<'a> {
     /// A vector consisting of all courses that are available.
     pub async fn search_courses(
         &self,
-        request_filter: SearchRequestBuilder<'a>,
+        request_filter: &SearchRequestBuilder<'a>,
     ) -> Option<Vec<WebRegSearchResultItem>> {
         let subject_code = if request_filter.subjects.is_empty() {
             "".to_string()
@@ -702,10 +702,8 @@ impl<'a> WebRegWrapper<'a> {
             // This can probably be made significantly more efficient
             request_filter
                 .courses
-                .into_iter()
+                .iter()
                 .map(|x| x.split_whitespace().collect::<Vec<_>>())
-                .collect::<Vec<_>>()
-                .into_iter()
                 .map(|course| {
                     course
                         .into_iter()

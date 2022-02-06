@@ -1,4 +1,6 @@
 mod webreg;
+mod tracker;
+mod util;
 
 use crate::webreg::webreg::{SearchRequestBuilder, WebRegWrapper};
 use std::error::Error;
@@ -10,15 +12,31 @@ const COOKIE: &str = include_str!("../cookie.txt");
 async fn main() -> Result<(), Box<dyn Error>> {
     let w = WebRegWrapper::new(COOKIE, "SP22");
     let valid = w.is_valid().await;
-    println!("Is valid? {}", valid);
 
     if !valid {
+        println!("Failed to login.");
         return Ok(());
     }
 
-    println!("Account name: {}", w.get_account_name().await);
+    println!("Logged in successfully. Account name: {}", w.get_account_name().await);
     println!();
 
+    tracker::track::track_webreg_enrollment(
+        &w,
+        &SearchRequestBuilder::new()
+            .add_subject("CSE")
+            .add_subject("COGS")
+    ).await;
+
+    Ok(())
+}
+
+/// Performs a basic test of the `WebRegWrapper`.
+///
+/// # Parameters
+/// - `w`: The wrapper.
+#[allow(dead_code)]
+async fn basic_intro(w: &WebRegWrapper<'_>) -> () {
     // Get my schedule
     let my_schedule = w.get_schedule(None).await.unwrap();
     println!(
@@ -32,7 +50,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     }
 
     // Get CSE 100 courses
-    let courses = w.get_course_info("CSE", "95").await.unwrap();
+    let courses = w.get_course_info("CSE", "100").await.unwrap();
 
     println!("{} possible sections found.", courses.len());
     for d in courses {
@@ -57,6 +75,4 @@ async fn main() -> Result<(), Box<dyn Error>> {
         search_res.len(),
         duration.as_secs_f32()
     );
-
-    Ok(())
 }
