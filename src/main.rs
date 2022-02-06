@@ -6,11 +6,17 @@ use crate::webreg::webreg::{SearchRequestBuilder, WebRegWrapper};
 use std::error::Error;
 use std::time::Instant;
 
-const COOKIE: &str = include_str!("../cookie.txt");
-
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<(), Box<dyn Error>> {
-    let w = WebRegWrapper::new(COOKIE, "SP22");
+    let cookie = get_cookies();
+    let cookie = cookie.trim();
+    if cookie.is_empty() {
+        eprintln!("'cookie.txt' file is empty. Try again.");
+        return Ok(());
+    }
+
+    let w = WebRegWrapper::new(cookie, "SP22");
+
     let valid = w.is_valid().await;
 
     if !valid {
@@ -32,10 +38,27 @@ async fn main() -> Result<(), Box<dyn Error>> {
     )
     .await;
 
-    basic_intro(&w).await;
-
     Ok(())
 }
+
+#[cfg(debug_assertions)]
+fn get_cookies() -> String {
+    include_str!("../cookie.txt").to_string()
+}
+
+#[cfg(not(debug_assertions))]
+fn get_cookies() -> String {
+    use std::fs;
+    use std::path::Path;
+    let file = Path::new("cookie.txt");
+    if !file.exists() {
+        eprintln!("'cookie.txt' file does not exist. Try again.");
+        return "".to_string()
+    }
+
+    fs::read_to_string(file).unwrap_or_else(|_| "".to_string())
+}
+
 
 /// Performs a basic test of the `WebRegWrapper`.
 ///
