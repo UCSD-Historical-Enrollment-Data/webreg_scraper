@@ -133,12 +133,13 @@ impl<'a> WebRegWrapper<'a> {
                     return None;
                 }
 
-                let text = r.text().await.unwrap_or("".to_string());
+                let text = r.text().await.unwrap_or_else(|_| "".to_string());
                 if text.is_empty() {
                     return None;
                 }
 
-                let parsed = serde_json::from_str::<Vec<ScheduledMeeting>>(&text).unwrap_or(vec![]);
+                let parsed =
+                    serde_json::from_str::<Vec<ScheduledMeeting>>(&text).unwrap_or_default();
                 if parsed.is_empty() {
                     return Some(vec![]);
                 }
@@ -166,7 +167,7 @@ impl<'a> WebRegWrapper<'a> {
                     if s_meeting.sect_code.as_bytes()[0].is_ascii_digit() {
                         special_classes
                             .entry(s_meeting.course_title.trim())
-                            .or_insert(vec![])
+                            .or_insert_with(Vec::new)
                             .push(s_meeting);
 
                         continue;
@@ -174,7 +175,7 @@ impl<'a> WebRegWrapper<'a> {
 
                     base_group_secs
                         .entry(s_meeting.course_title.trim())
-                        .or_insert(vec![])
+                        .or_insert_with(Vec::new)
                         .push(s_meeting);
                 }
 
@@ -311,14 +312,8 @@ impl<'a> WebRegWrapper<'a> {
                         course_code: sch_meetings[0].course_code.trim().to_string(),
                         course_title: sch_meetings[0].course_title.trim().to_string(),
                         section_code: sch_meetings[0].sect_code.to_string(),
-                        section_capacity: match sch_meetings[0].section_capacity {
-                            Some(r) => r,
-                            None => -1,
-                        },
-                        enrolled_count: match sch_meetings[0].enrolled_count {
-                            Some(r) => r,
-                            None => -1,
-                        },
+                        section_capacity: sch_meetings[0].section_capacity.unwrap_or(-1),
+                        enrolled_count: sch_meetings[0].enrolled_count.unwrap_or(-1),
                         grade_option: sch_meetings[0].grade_option.trim().to_string(),
                         units: sch_meetings[0].sect_credit_hrs,
                         enrolled_status: match &*sch_meetings[0].enroll_status {
@@ -394,14 +389,14 @@ impl<'a> WebRegWrapper<'a> {
                     return None;
                 }
 
-                let text = r.text().await.unwrap_or("".to_string());
+                let text = r.text().await.unwrap_or_else(|_| "".to_string());
                 if text.is_empty() {
                     return None;
                 }
 
                 let course_dept_id =
                     format!("{} {}", subject_code.trim(), course_code.trim()).to_uppercase();
-                let parsed: Vec<WebRegMeeting> = serde_json::from_str(&text).unwrap_or(vec![]);
+                let parsed: Vec<WebRegMeeting> = serde_json::from_str(&text).unwrap_or_default();
 
                 // Process any "special" sections
                 let mut sections: Vec<CourseSection> = vec![];
@@ -522,7 +517,7 @@ impl<'a> WebRegWrapper<'a> {
                 // Process each group
                 for group in all_groups {
                     let (m_m_type, m_days) =
-                        webreg_helper::parse_meeting_type_date(&group.main_meeting);
+                        webreg_helper::parse_meeting_type_date(group.main_meeting);
 
                     let main_meeting = Meeting {
                         meeting_type: m_m_type.to_string(),
@@ -803,7 +798,7 @@ impl<'a> WebRegWrapper<'a> {
                 let text = r.text().await;
                 match text {
                     Err(_) => None,
-                    Ok(t) => Some(serde_json::from_str(&t).unwrap_or(vec![])),
+                    Ok(t) => Some(serde_json::from_str(&t).unwrap_or_default()),
                 }
             }
         }
@@ -864,7 +859,7 @@ impl<'a> WebRegWrapper<'a> {
         let poss_class = self
             .get_schedule(None)
             .await
-            .unwrap_or(vec![])
+            .unwrap_or_default()
             .into_iter()
             .find(|x| x.section_number == section_number);
 
@@ -918,7 +913,7 @@ impl<'a> WebRegWrapper<'a> {
         let u = plan_options.unit_count.to_string();
         let crsc_code = self._get_formatted_course_code(plan_options.course_code);
 
-        if !bypass_check {
+        if bypass_check {
             // We need to call the edit endpoint first, or else we'll have issues where we don't
             // actually enroll in every component of the course.
             let params_edit: HashMap<&str, &str> = HashMap::from([
@@ -1019,12 +1014,12 @@ impl<'a> WebRegWrapper<'a> {
                 if !r.status().is_success() {
                     false
                 } else {
-                    let text = r.text().await.unwrap_or(
+                    let text = r.text().await.unwrap_or_else(|_| {
                         json!({
                             "OPS": "FAIL"
                         })
-                        .to_string(),
-                    );
+                        .to_string()
+                    });
 
                     let json: Value = serde_json::from_str(&text).unwrap();
                     json["OPS"].is_string() && json["OPS"].as_str().unwrap() == "SUCCESS"
@@ -1230,7 +1225,7 @@ impl<'a> SearchRequestBuilder<'a> {
     /// # Returns
     /// The `SearchRequestBuilder`
     pub fn apply_days(mut self, day: u32) -> Self {
-        if day > 7 || day < 1 {
+        if !(1..=7).contains(&day) {
             return self;
         }
 

@@ -24,13 +24,13 @@ async fn main() -> Result<(), Box<dyn Error>> {
     );
     println!();
 
-    /*
     tracker::track::track_webreg_enrollment(
         &w,
         &SearchRequestBuilder::new()
             .add_subject("CSE")
-            .add_subject("COGS")
-    ).await;*/
+            .add_subject("COGS"),
+    )
+    .await;
 
     basic_intro(&w).await;
 
@@ -42,7 +42,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 /// # Parameters
 /// - `w`: The wrapper.
 #[allow(dead_code)]
-async fn basic_intro(w: &WebRegWrapper<'_>) -> () {
+async fn basic_intro(w: &WebRegWrapper<'_>) {
     // Get my schedule
     let my_schedule = w.get_schedule(None).await.unwrap();
     println!(

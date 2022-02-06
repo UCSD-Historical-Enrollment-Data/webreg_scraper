@@ -19,7 +19,7 @@ const ENROLLMENT_NAME: &str = "enrollment.csv";
 pub async fn track_webreg_enrollment(
     wrapper: &WebRegWrapper<'_>,
     search_res: &SearchRequestBuilder<'_>,
-) -> () {
+) {
     let is_new = !Path::new(ENROLLMENT_NAME).exists();
 
     let f = OpenOptions::new()
@@ -30,26 +30,26 @@ pub async fn track_webreg_enrollment(
 
     let mut writer = BufWriter::new(f);
     if is_new {
-        writer
-            .write_fmt(format_args!(
-                "{},{},{},{},{},{},{},{},{}\n",
-                "time",
-                "subj_course_id",
-                "sec_code",
-                "sec_id",
-                "prof",
-                "available",
-                "waitlist",
-                "total",
-                "meetings"
-            ))
-            .unwrap();
+        writeln!(
+            writer,
+            "{},{},{},{},{},{},{},{},{}\n",
+            "time",
+            "subj_course_id",
+            "sec_code",
+            "sec_id",
+            "prof",
+            "available",
+            "waitlist",
+            "total",
+            "meetings"
+        )
+        .unwrap();
     }
 
     let mut i = 0;
     loop {
         writer.flush().unwrap();
-        let results = wrapper.search_courses(search_res).await.unwrap_or(vec![]);
+        let results = wrapper.search_courses(search_res).await.unwrap_or_default();
 
         if results.is_empty() {
             eprintln!("[{}] No courses found. Exiting.", get_pretty_time());
@@ -76,7 +76,7 @@ pub async fn track_webreg_enrollment(
                     "[{}] WebReg authentication error occurred.",
                     get_pretty_time()
                 ),
-                Some(r) if r.len() > 0 => {
+                Some(r) if !r.is_empty() => {
                     println!(
                         "[{}] Processing {} section(s) for {}.",
                         get_pretty_time(),
@@ -85,9 +85,9 @@ pub async fn track_webreg_enrollment(
                     );
 
                     r.into_iter().for_each(|c| {
-                        write!(
+                        writeln!(
                             writer,
-                            "{},{},{},{},{},{},{},{},{}\n",
+                            "{},{},{},{},{},{},{},{},{}",
                             get_epoch_time(),
                             c.course_dept_id,
                             c.section_code,
@@ -107,9 +107,9 @@ pub async fn track_webreg_enrollment(
                                         MeetingDay::None => "N/A".to_string(),
                                     });
 
-                                    s.push_str(" ");
+                                    s.push(' ');
                                     s.push_str(&m.meeting_type);
-                                    s.push_str(" ");
+                                    s.push(' ');
                                     s.push_str(&format!(
                                         "{}:{:02} - {}:{:02}",
                                         m.start_hr, m.start_min, m.end_hr, m.end_min

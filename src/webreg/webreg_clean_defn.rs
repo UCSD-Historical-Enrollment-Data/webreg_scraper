@@ -60,7 +60,7 @@ pub enum MeetingDay {
 impl ToString for Meeting {
     fn to_string(&self) -> String {
         let meeting_days_display = match &self.meeting_days {
-            MeetingDay::Repeated(r) => r.join("").to_string(),
+            MeetingDay::Repeated(r) => r.join(""),
             MeetingDay::OneTime(r) => r.to_string(),
             MeetingDay::None => "N/A".to_string(),
         };
