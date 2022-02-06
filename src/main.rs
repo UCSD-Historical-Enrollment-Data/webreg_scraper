@@ -28,7 +28,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
         "Logged in successfully. Account name: {}",
         w.get_account_name().await
     );
-    println!();
 
     tracker::track::track_webreg_enrollment(
         &w,

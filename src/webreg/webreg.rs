@@ -1,5 +1,6 @@
 #![allow(dead_code)]
 
+use crate::util::get_epoch_time;
 use crate::webreg::webreg_clean_defn::{
     CourseSection, EnrollmentStatus, Meeting, MeetingDay, ScheduledSection,
 };
@@ -29,6 +30,7 @@ const CHANGE_ENROLL: &str = "https://act.ucsd.edu/webreg2/svc/wradapter/secure/c
 const PLAN_ADD: &str = "https://act.ucsd.edu/webreg2/svc/wradapter/secure/plan-add";
 const PLAN_REMOVE: &str = "https://act.ucsd.edu/webreg2/svc/wradapter/secure/plan-remove";
 const PLAN_EDIT: &str = "https://act.ucsd.edu/webreg2/svc/wradapter/secure/edit-plan";
+const PING_SERVER: &str = "https://act.ucsd.edu/webreg2/svc/wradapter/secure/ping-server";
 
 /// A wrapper for [UCSD's WebReg](https://act.ucsd.edu/webreg2/start).
 pub struct WebRegWrapper<'a> {
@@ -1006,7 +1008,37 @@ impl<'a> WebRegWrapper<'a> {
         .await
     }
 
-    #[inline]
+    /// Pings the WebReg server. Presumably, this is the endpoint that is used to ensure that
+    /// your (authenticated) session is still valid. In other words, if this isn't called, I
+    /// assume that you will be logged out, rendering your cookies invalid.
+    ///
+    /// # Returns
+    /// `true` if the ping was successful and `false` otherwise.
+    pub async fn ping_server(&self) -> bool {
+        let res = self
+            .client
+            .get(format!("{}?_={}", PING_SERVER, get_epoch_time()))
+            .header(COOKIE, self.cookies)
+            .header(USER_AGENT, MY_USER_AGENT)
+            .send()
+            .await;
+
+        match res {
+            Err(_) => false,
+            Ok(r) => {
+                let text = r.text().await.unwrap_or_else(|_| {
+                    json!({
+                        "SESSION_OK": false
+                    })
+                    .to_string()
+                });
+
+                let json: Value = serde_json::from_str(&text).unwrap();
+                json["SESSION_OK"].is_boolean() && json["SESSION_OK"].as_bool().unwrap()
+            }
+        }
+    }
+
     async fn _process_response(&self, res: Result<Response, Error>) -> bool {
         match res {
             Err(_) => false,
