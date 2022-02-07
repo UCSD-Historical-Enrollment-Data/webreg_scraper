@@ -6,7 +6,7 @@ use super::helper;
 
 pub type Time = (i16, i16);
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Schedule<'a> {
     /// All relevant sections.
     pub sections: HashMap<&'a str, &'a CourseSection>,
@@ -17,9 +17,9 @@ pub struct Schedule<'a> {
 
 impl<'a> Schedule<'a> {
     /// Creates a new `Schedule`.
-    /// 
+    ///
     /// # Returns
-    /// The new `Schedule`. 
+    /// The new `Schedule`.
     pub fn new() -> Self {
         Schedule {
             sections: HashMap::new(),
@@ -28,12 +28,12 @@ impl<'a> Schedule<'a> {
     }
 
     /// Checks if the given `CourseSection` can be added.
-    /// 
+    ///
     /// # Parameters
     /// - `course`: The course to check.
-    /// 
+    ///
     /// # Returns
-    /// `true` if this can be added and `false` otherwise. 
+    /// `true` if this can be added and `false` otherwise.
     pub fn can_add_course(&self, course: &CourseSection) -> bool {
         if self.sections.contains_key(&course.subj_course_id.as_str()) {
             return false;
@@ -62,25 +62,23 @@ impl<'a> Schedule<'a> {
                             None => continue,
                         }
                     }
-                },
-                MeetingDay::OneTime(ref day) => {
-                    match self.used_times.get(&day.as_str()) {
-                        Some(times) => {
-                            for (from_time, to_time) in times {
-                                if helper::time_conflicts(
-                                    new_from_time,
-                                    new_to_time,
-                                    *from_time,
-                                    *to_time,
-                                ) {
-                                    return false;
-                                }
+                }
+                MeetingDay::OneTime(ref day) => match self.used_times.get(&day.as_str()) {
+                    Some(times) => {
+                        for (from_time, to_time) in times {
+                            if helper::time_conflicts(
+                                new_from_time,
+                                new_to_time,
+                                *from_time,
+                                *to_time,
+                            ) {
+                                return false;
                             }
                         }
-                        None => continue 
                     }
+                    None => continue,
                 },
-                MeetingDay::None => todo!(),
+                MeetingDay::None => continue,
             }
         }
 
@@ -89,11 +87,11 @@ impl<'a> Schedule<'a> {
 
     /// Adds the `CourseSection` to the `Schedule`. This assumes that `can_add_course`
     /// has been called.
-    /// 
+    ///
     /// # Parameters
     /// - `course`: The course to add.
     pub fn add_course(&mut self, course: &'a CourseSection) {
-        self.sections.insert(course.subj_course_id.as_str(), course); 
+        self.sections.insert(course.subj_course_id.as_str(), course);
         for meeting in &course.meetings {
             let end_time = (meeting.end_hr, meeting.end_min);
             let start_time = (meeting.start_hr, meeting.start_min);
@@ -101,19 +99,26 @@ impl<'a> Schedule<'a> {
             match meeting.meeting_days {
                 MeetingDay::Repeated(ref days) => {
                     for day in days {
-                        self.used_times.entry(day.as_str()).or_default().insert((start_time, end_time));
+                        self.used_times
+                            .entry(day.as_str())
+                            .or_default()
+                            .insert((start_time, end_time));
                     }
-                },
+                }
                 MeetingDay::OneTime(ref o) => {
-                    self.used_times.entry(o.as_str()).or_default().insert((start_time, end_time));
-                },
+                    self.used_times
+                        .entry(o.as_str())
+                        .or_default()
+                        .insert((start_time, end_time));
+                }
                 MeetingDay::None => continue,
             }
         }
     }
 }
 
-/// Generates all possible schedules. This uses a very naive implementation.
+/// Generates all possible schedules. This uses a very naive implementation which
+/// will struggle to work on a larger set.
 ///
 /// # Parameters
 /// - `wanted_courses`: The desired courses.
@@ -146,32 +151,33 @@ pub fn generate_schedules<'a>(
     'outer: for desired_course in wanted_courses {
         match map.get(desired_course) {
             Some(all_courses) => {
-                // Schedule empty means we add initial cases. 
+                // Schedule empty means we add initial cases.
                 if curr_schedules.is_empty() {
                     if added {
                         break 'outer;
                     }
 
-                    added = true; 
+                    added = true;
                     for course in all_courses {
                         let mut s = Schedule::new();
                         s.add_course(course);
+                        curr_schedules.push(s);
                     }
 
-                    continue; 
+                    continue;
                 }
 
                 let mut sch_to_add: Vec<Schedule<'a>> = vec![];
-                for course in all_courses {
-                    for temp_schedule in &curr_schedules {
-                        if !temp_schedule.can_add_course(&course) {
+                for temp_schedule in &curr_schedules {
+                    for course in all_courses {
+                        if !temp_schedule.can_add_course(course) {
                             continue;
                         }
 
                         let mut sch = temp_schedule.clone();
                         sch.add_course(course);
                         sch_to_add.push(sch);
-                    }        
+                    }
                 }
 
                 curr_schedules = sch_to_add;

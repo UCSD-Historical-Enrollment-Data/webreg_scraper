@@ -31,6 +31,9 @@ const PLAN_ADD: &str = "https://act.ucsd.edu/webreg2/svc/wradapter/secure/plan-a
 const PLAN_REMOVE: &str = "https://act.ucsd.edu/webreg2/svc/wradapter/secure/plan-remove";
 const PLAN_EDIT: &str = "https://act.ucsd.edu/webreg2/svc/wradapter/secure/edit-plan";
 const PING_SERVER: &str = "https://act.ucsd.edu/webreg2/svc/wradapter/secure/ping-server";
+const REMOVE_SCHEDULE: &str = "https://act.ucsd.edu/webreg2/svc/wradapter/secure/sched-remove";
+const RENAME_SCHEDULE: &str = "https://act.ucsd.edu/webreg2/svc/wradapter/secure/plan-rename";
+const ALL_SCHEDULE: &str = "https://act.ucsd.edu/webreg2/svc/wradapter/secure/sched-get-schednames";
 
 /// A wrapper for [UCSD's WebReg](https://act.ucsd.edu/webreg2/start).
 pub struct WebRegWrapper<'a> {
@@ -1035,6 +1038,99 @@ impl<'a> WebRegWrapper<'a> {
 
                 let json: Value = serde_json::from_str(&text).unwrap();
                 json["SESSION_OK"].is_boolean() && json["SESSION_OK"].as_bool().unwrap()
+            }
+        }
+    }
+
+    /// Renames a schedule to the specified name. You cannot rename the default
+    /// `My Schedule` schedule.
+    ///
+    /// # Parameter
+    /// - `old_name`: The name of the old schedule.
+    /// - `new_name`: The name that you want to change the old name to.
+    ///
+    /// # Returns
+    /// `true` if the renaming was successful and `false` otherwise.
+    pub async fn rename_schedule(&self, old_name: &str, new_name: &str) -> bool {
+        // Can't rename your default schedule.
+        if old_name == DEFAULT_SCHEDULE_NAME {
+            return false;
+        }
+
+        let params: HashMap<&str, &str> = HashMap::from([
+            ("termcode", self.term),
+            ("oldschedname", old_name),
+            ("newschedname", new_name),
+        ]);
+
+        self._process_response(
+            self.client
+                .post(RENAME_SCHEDULE)
+                .form(&params)
+                .header(COOKIE, self.cookies)
+                .header(USER_AGENT, MY_USER_AGENT)
+                .send()
+                .await,
+        )
+        .await
+    }
+
+    /// Removes a schedule. You cannot delete the default `My Schedule` one.
+    ///
+    /// # Parameter
+    /// - `schedule_name`: The name of the schedule to delete.
+    ///
+    /// # Returns
+    /// `true` if the deletion was successful and `false` otherwise.
+    pub async fn remove_schedule(&self, schedule_name: &str) -> bool {
+        // Can't remove your default schedule.
+        if schedule_name == DEFAULT_SCHEDULE_NAME {
+            return false;
+        }
+
+        let params: HashMap<&str, &str> =
+            HashMap::from([("termcode", self.term), ("schedname", schedule_name)]);
+
+        self._process_response(
+            self.client
+                .post(REMOVE_SCHEDULE)
+                .form(&params)
+                .header(COOKIE, self.cookies)
+                .header(USER_AGENT, MY_USER_AGENT)
+                .send()
+                .await,
+        )
+        .await
+    }
+
+    /// Gets all of your schedules.
+    ///
+    /// # Returns
+    /// A vector of strings representing the names of the schedules, or `None` if
+    /// something went wrong.
+    pub async fn get_schedules(&self) -> Option<Vec<String>> {
+        let url = Url::parse_with_params(ALL_SCHEDULE, &[("termcode", self.term)]).unwrap();
+
+        let res = self
+            .client
+            .get(url)
+            .header(COOKIE, self.cookies)
+            .header(USER_AGENT, MY_USER_AGENT)
+            .send()
+            .await;
+
+        match res {
+            Err(_) => None,
+            Ok(r) => {
+                if !r.status().is_success() {
+                    return None;
+                }
+
+                let text = r.text().await;
+                match text {
+                    Err(_) => None,
+                    Ok(t) => Some(serde_json::from_str(&t).unwrap_or_default()),
+                }
             }
         }
     }

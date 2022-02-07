@@ -4,9 +4,9 @@ mod util;
 mod webreg;
 
 use crate::schedule::scheduler;
-use crate::webreg::webreg_wrapper::{SearchRequestBuilder, WebRegWrapper};
+use crate::webreg::webreg_wrapper::{PlanAdd, SearchRequestBuilder, WebRegWrapper};
 use std::error::Error;
-use std::time::Instant;
+use std::time::{Duration};
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<(), Box<dyn Error>> {
@@ -90,30 +90,74 @@ async fn basic_intro(w: &WebRegWrapper<'_>) {
         println!("{}", d.to_string())
     }
 
+    // Get my schedules.
+    println!("Schedules: {:?}", w.get_schedules().await.unwrap());
+
     // Search stuff.
-    let start = Instant::now();
-    let search_res = w
-        .search_courses_detailed(
-            SearchRequestBuilder::new()
-                .add_course("MATH 180A")
-                .add_course("POLI 28")
-                .add_course("CSE 130")
-                .add_course("HISC 108"),
-        )
-        .await
-        .unwrap();
+    get_schedules(w, &["MATH 184", "CSE 30"], false).await;
+}
 
-    let duration = start.elapsed();
+/// Gets possible schedules, optionally adding them to WebReg.
+///
+/// # Parameters
+/// - `w`: The `WebRegWrapper`.
+/// - `classes`: All classes to check.
+/// - `add_to_webreg`: Whether to add your schedules to WebReg.
+async fn get_schedules(w: &WebRegWrapper<'_>, classes: &[&str], add_to_webreg: bool) {
+    if classes.is_empty() {
+        return; 
+    }
 
-    println!(
-        "Found {} sections in {} seconds!",
-        search_res.len(),
-        duration.as_secs_f32()
-    );
+    let mut search = SearchRequestBuilder::new();
+    for c in classes {
+        search = search.add_course(c);
+    }
+    let search_res = w.search_courses_detailed(search).await.unwrap();
 
-    let s = scheduler::generate_schedules(
+    println!("Found {} sections! Results are:", search_res.len());
+    for s in &search_res {
+        println!("{}", s.to_string());
+    }
+
+    println!("\n");
+    let schedules = scheduler::generate_schedules(
         &["MATH 180A", "POLI 28", "CSE 130", "HISC 108"],
         &search_res,
     );
-    println!("{} schedules found.", s.len());
+
+    println!("{} schedules found.", schedules.len());
+    let mut i = 0;
+    for schedule in schedules {
+        i += 1;
+        let schedule_name = format!("My Schedule {}", i);
+        println!(
+            "{}",
+            if add_to_webreg {
+                format!("Adding '{}' to WebReg", schedule_name)
+            } else {
+                schedule_name.to_string()
+            }
+        );
+
+        for (_, section) in schedule.sections {
+            if add_to_webreg {
+                let (sub, code) = section.subj_course_id.split_once(" ").unwrap();
+                w.add_to_plan(
+                    PlanAdd {
+                        subject_code: sub,
+                        course_code: code,
+                        section_number: &*section.section_id,
+                        section_code: &*section.section_code,
+                        grading_option: None,
+                        schedule_name: Some(&*schedule_name),
+                        unit_count: 4,
+                    },
+                    true,
+                )
+                .await;
+                tokio::time::sleep(Duration::from_secs(1)).await;
+                continue;
+            }
+        }
+    }
 }
