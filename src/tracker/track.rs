@@ -46,7 +46,16 @@ pub async fn track_webreg_enrollment(
         .unwrap();
     }
 
+    let mut fail_count = 0;
     loop {
+        if fail_count != 0 && fail_count > 20 {
+            eprintln!(
+                "[{}] Too many failures when trying to request data from WebReg. Quitting.",
+                get_pretty_time()
+            );
+            break;
+        }
+
         writer.flush().unwrap();
         let results = wrapper.search_courses(search_res).await.unwrap_or_default();
 
@@ -66,11 +75,16 @@ pub async fn track_webreg_enrollment(
                 .get_course_info(r.subj_code.trim(), r.course_code.trim())
                 .await;
             match res {
-                None => panic!(
-                    "[{}] WebReg authentication error occurred.",
-                    get_pretty_time()
-                ),
+                None => {
+                    fail_count += 1;
+                    eprintln!(
+                        "[{}] An unknown error occurred. Were you logged out? Skipping. (FAIL_COUNT: {})",
+                        get_pretty_time(),
+                        fail_count
+                    );
+                }
                 Some(r) if !r.is_empty() => {
+                    fail_count = 0;
                     println!(
                         "[{}] Processing {} section(s) for {}.",
                         get_pretty_time(),
@@ -117,12 +131,15 @@ pub async fn track_webreg_enrollment(
                         .unwrap()
                     });
                 }
-                _ => eprintln!(
-                    "[{}] Course {} {} not found on WebReg.",
-                    get_pretty_time(),
-                    r.subj_code,
-                    r.course_code
-                ),
+                _ => {
+                    fail_count = 0;
+                    eprintln!(
+                        "[{}] Course {} {} not found on WebReg.",
+                        get_pretty_time(),
+                        r.subj_code,
+                        r.course_code
+                    );
+                }
             }
 
             // Just to be nice to webreg
