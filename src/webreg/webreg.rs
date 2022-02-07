@@ -1065,7 +1065,7 @@ impl<'a> WebRegWrapper<'a> {
         !str.contains("Skip to main content")
     }
 
-    #[inline]
+    #[inline(always)]
     fn _get_formatted_course_code(&self, course_code: &str) -> String {
         // If the course code only has 1 digit (excluding any letters), then we need to prepend 2
         // spaces to the course code.

@@ -46,7 +46,6 @@ pub async fn track_webreg_enrollment(
         .unwrap();
     }
 
-    let mut i = 0;
     loop {
         writer.flush().unwrap();
         let results = wrapper.search_courses(search_res).await.unwrap_or_default();
@@ -63,11 +62,6 @@ pub async fn track_webreg_enrollment(
         );
 
         for r in results {
-            if i % 10 == 0 {
-                println!("[{}] Taking a 2 second break.", get_pretty_time());
-                tokio::time::sleep(Duration::from_secs(2)).await;
-            }
-
             let res = wrapper
                 .get_course_info(r.subj_code.trim(), r.course_code.trim())
                 .await;
@@ -131,8 +125,8 @@ pub async fn track_webreg_enrollment(
                 ),
             }
 
-            i += 1;
-            tokio::time::sleep(Duration::from_secs(1)).await;
+            // Just to be nice to webreg
+            tokio::time::sleep(Duration::from_secs(3)).await;
         }
     }
 }
