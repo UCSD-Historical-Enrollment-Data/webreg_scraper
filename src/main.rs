@@ -2,7 +2,7 @@ mod tracker;
 mod util;
 mod webreg;
 
-use crate::webreg::webreg::{SearchRequestBuilder, WebRegWrapper};
+use crate::webreg::webreg_wrapper::{SearchRequestBuilder, WebRegWrapper};
 use std::error::Error;
 use std::time::Instant;
 
@@ -29,13 +29,17 @@ async fn main() -> Result<(), Box<dyn Error>> {
         w.get_account_name().await
     );
 
-    tracker::track::track_webreg_enrollment(
-        &w,
-        &SearchRequestBuilder::new()
-            .add_subject("CSE")
-            .add_subject("COGS"),
-    )
-    .await;
+    if cfg!(debug_assertions) {
+        basic_intro(&w).await;
+    } else {
+        tracker::track::track_webreg_enrollment(
+            &w,
+            &SearchRequestBuilder::new()
+                .add_subject("CSE")
+                .add_subject("COGS"),
+        )
+        .await;
+    }
 
     Ok(())
 }
@@ -52,12 +56,11 @@ fn get_cookies() -> String {
     let file = Path::new("cookie.txt");
     if !file.exists() {
         eprintln!("'cookie.txt' file does not exist. Try again.");
-        return "".to_string()
+        return "".to_string();
     }
 
     fs::read_to_string(file).unwrap_or_else(|_| "".to_string())
 }
-
 
 /// Performs a basic test of the `WebRegWrapper`.
 ///

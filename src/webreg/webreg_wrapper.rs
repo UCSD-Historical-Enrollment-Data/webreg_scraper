@@ -112,7 +112,7 @@ impl<'a> WebRegWrapper<'a> {
         let url = Url::parse_with_params(
             CURR_SCHEDULE,
             &[
-                ("schedname", schedule_name.unwrap_or("")),
+                ("schedname", schedule_name.unwrap_or(DEFAULT_SCHEDULE_NAME)),
                 ("final", ""),
                 ("sectnum", ""),
                 ("termcode", self.term),

@@ -32,16 +32,7 @@ pub async fn track_webreg_enrollment(
     if is_new {
         writeln!(
             writer,
-            "{},{},{},{},{},{},{},{},{}\n",
-            "time",
-            "subj_course_id",
-            "sec_code",
-            "sec_id",
-            "prof",
-            "available",
-            "waitlist",
-            "total",
-            "meetings"
+            "time,subj_course_id,sec_code,sec_id,prof,available,waitlist,total,meetings"
         )
         .unwrap();
     }
