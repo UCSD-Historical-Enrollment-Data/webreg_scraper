@@ -31,7 +31,7 @@ Below are some features that this wrapper has, along with what I plan on working
 
 ### iii. Miscellaneous (Low-Priority)
 - [ ] Get appointment time.
-- [ ] Creating, or removing/renaming, a schedule.
+- [x] Creating, or removing/renaming, a schedule.
 - [ ] Adding, or removing, an event from a schedule.
 - [x] Sending a confirmation email to yourself.
 

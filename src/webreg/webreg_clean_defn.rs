@@ -64,7 +64,7 @@ pub struct Meeting {
     /// `CENTR 115`, then this would be `CENTR`.
     pub building: String,
     /// The room number where this meeting will occur. For example, if the meeting is held in
-    /// `CENTR 115`, then this would be `115`. 
+    /// `CENTR 115`, then this would be `115`.
     pub room: String,
 }
 

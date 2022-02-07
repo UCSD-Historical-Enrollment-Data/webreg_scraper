@@ -11,7 +11,7 @@ use super::scheduler::Time;
 /// # Returns
 /// `true` if the time conflicts and `false` otherwise.
 pub fn time_conflicts(a_from: Time, a_to: Time, b_from: Time, b_to: Time) -> bool {
-    !_time_conflicts(a_from, a_to, b_from, b_to) && !_time_conflicts(b_from, b_to, a_from, a_to)
+    _time_conflicts(a_from, a_to, b_from, b_to) || _time_conflicts(b_from, b_to, a_from, a_to)
 }
 
 fn _time_conflicts(a_from: Time, a_to: Time, b_from: Time, b_to: Time) -> bool {
@@ -22,20 +22,20 @@ fn _time_conflicts(a_from: Time, a_to: Time, b_from: Time, b_to: Time) -> bool {
 
     // Case 1: 1100 - 1200 & 1030 - 1130
     if b_start <= a_start && a_start <= b_end {
-        return false;
+        return true;
     }
 
     // Case 2: 1100 - 1200 & 1130 - 1230
     if b_start <= a_end && a_end <= b_end {
-        return false;
+        return true;
     }
 
     // Case 3: 1100 - 12:00 & 1120 - 1140
     if a_start <= b_start && b_end <= a_end {
-        return false;
+        return true;
     }
 
-    true
+    false
 }
 
 #[cfg(test)]

@@ -6,7 +6,7 @@ mod webreg;
 use crate::schedule::scheduler;
 use crate::webreg::webreg_wrapper::{PlanAdd, SearchRequestBuilder, WebRegWrapper};
 use std::error::Error;
-use std::time::{Duration};
+use std::time::Duration;
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<(), Box<dyn Error>> {
@@ -82,19 +82,19 @@ async fn basic_intro(w: &WebRegWrapper<'_>) {
         println!("{}", d.to_string());
     }
 
-    // Get CSE 100 courses
-    let courses = w.get_course_info("CSE", "100").await.unwrap();
-
-    println!("{} possible sections found.", courses.len());
-    for d in courses {
-        println!("{}", d.to_string())
-    }
-
     // Get my schedules.
     println!("Schedules: {:?}", w.get_schedules().await.unwrap());
 
     // Search stuff.
-    get_schedules(w, &["MATH 184", "CSE 30"], false).await;
+    get_schedules(
+        w,
+        &[
+            "POLI 27", "MATH 20E", "MATH 109", "CSE 12", "CSE 15L", "CSE 30",
+        ],
+        false,
+        false,
+    )
+    .await;
 }
 
 /// Gets possible schedules, optionally adding them to WebReg.
@@ -103,9 +103,10 @@ async fn basic_intro(w: &WebRegWrapper<'_>) {
 /// - `w`: The `WebRegWrapper`.
 /// - `classes`: All classes to check.
 /// - `add_to_webreg`: Whether to add your schedules to WebReg.
-async fn get_schedules(w: &WebRegWrapper<'_>, classes: &[&str], add_to_webreg: bool) {
+/// - `print`: Whether to print the schedules (set to `false` if you don't need to see the schedules)
+async fn get_schedules(w: &WebRegWrapper<'_>, classes: &[&str], add_to_webreg: bool, print: bool) {
     if classes.is_empty() {
-        return; 
+        return;
     }
 
     let mut search = SearchRequestBuilder::new();
@@ -114,18 +115,21 @@ async fn get_schedules(w: &WebRegWrapper<'_>, classes: &[&str], add_to_webreg: b
     }
     let search_res = w.search_courses_detailed(search).await.unwrap();
 
-    println!("Found {} sections! Results are:", search_res.len());
-    for s in &search_res {
-        println!("{}", s.to_string());
+    println!("Found {} sections!", search_res.len());
+    if print {
+        for s in &search_res {
+            println!("{}", s.to_string());
+        }
     }
 
-    println!("\n");
-    let schedules = scheduler::generate_schedules(
-        &["MATH 180A", "POLI 28", "CSE 130", "HISC 108"],
-        &search_res,
-    );
+    let schedules = scheduler::generate_schedules(classes, &search_res);
 
     println!("{} schedules found.", schedules.len());
+
+    if !add_to_webreg && !print {
+        return;
+    }
+
     let mut i = 0;
     for schedule in schedules {
         i += 1;
@@ -142,6 +146,7 @@ async fn get_schedules(w: &WebRegWrapper<'_>, classes: &[&str], add_to_webreg: b
         for (_, section) in schedule.sections {
             if add_to_webreg {
                 let (sub, code) = section.subj_course_id.split_once(" ").unwrap();
+                // TODO add_to_plan doesn't seem to work fully (see CSE 130)
                 w.add_to_plan(
                     PlanAdd {
                         subject_code: sub,
@@ -158,6 +163,8 @@ async fn get_schedules(w: &WebRegWrapper<'_>, classes: &[&str], add_to_webreg: b
                 tokio::time::sleep(Duration::from_secs(1)).await;
                 continue;
             }
+
+            println!("{}", section.to_string());
         }
     }
 }
