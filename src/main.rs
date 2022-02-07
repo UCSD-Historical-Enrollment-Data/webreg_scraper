@@ -1,7 +1,9 @@
+mod schedule;
 mod tracker;
 mod util;
 mod webreg;
 
+use crate::schedule::scheduler;
 use crate::webreg::webreg_wrapper::{SearchRequestBuilder, WebRegWrapper};
 use std::error::Error;
 use std::time::Instant;
@@ -93,8 +95,10 @@ async fn basic_intro(w: &WebRegWrapper<'_>) {
     let search_res = w
         .search_courses_detailed(
             SearchRequestBuilder::new()
-                .add_course("MATH 20B")
-                .add_course("MATH 10B"),
+                .add_course("MATH 180A")
+                .add_course("POLI 28")
+                .add_course("CSE 130")
+                .add_course("HISC 108"),
         )
         .await
         .unwrap();
@@ -106,4 +110,10 @@ async fn basic_intro(w: &WebRegWrapper<'_>) {
         search_res.len(),
         duration.as_secs_f32()
     );
+
+    let s = scheduler::generate_schedules(
+        &["MATH 180A", "POLI 28", "CSE 130", "HISC 108"],
+        &search_res,
+    );
+    println!("{} schedules found.", s.len());
 }
