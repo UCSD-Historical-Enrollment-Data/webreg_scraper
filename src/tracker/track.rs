@@ -80,7 +80,7 @@ pub async fn track_webreg_enrollment(
                         "[{}] Processing {} section(s) for {}.",
                         get_pretty_time(),
                         r.len(),
-                        r[0].course_dept_id
+                        r[0].subj_course_id
                     );
 
                     r.into_iter().for_each(|c| {
@@ -88,7 +88,7 @@ pub async fn track_webreg_enrollment(
                             writer,
                             "{},{},{},{},{},{},{},{},{}",
                             get_epoch_time(),
-                            c.course_dept_id,
+                            c.subj_course_id,
                             c.section_code,
                             c.section_id,
                             // Every instructor name (except staff) has a comma
