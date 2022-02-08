@@ -1153,6 +1153,14 @@ impl<'a> WebRegWrapper<'a> {
         }
     }
 
+    /// Gets the current term.
+    /// 
+    /// # Returns
+    /// The current term.
+    pub fn get_term(&self) -> &'a str {
+        self.term
+    }
+
     #[inline(always)]
     fn _internal_is_valid(&self, str: &str) -> bool {
         !str.contains("Skip to main content")

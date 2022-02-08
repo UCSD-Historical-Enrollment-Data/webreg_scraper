@@ -13,7 +13,7 @@ pub struct WebRegSearchResultItem {
 
     /// The course title. For example, `Abstract Algebra II`.
     #[serde(rename = "CRSE_TITLE")]
-    course_title: String,
+    pub course_title: String,
 
     /// The minimum number of units you can get.
     #[serde(rename = "UNIT_FROM")]

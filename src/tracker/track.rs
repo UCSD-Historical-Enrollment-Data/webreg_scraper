@@ -1,5 +1,4 @@
 use crate::util::{get_epoch_time, get_pretty_time};
-use crate::webreg::webreg_clean_defn::MeetingDay;
 use crate::{SearchRequestBuilder, WebRegWrapper};
 use std::fs::OpenOptions;
 use std::io::{BufWriter, Write};
@@ -98,24 +97,7 @@ pub async fn track_webreg_enrollment(
                             c.total_seats,
                             c.meetings
                                 .into_iter()
-                                .map(|m| {
-                                    let mut s = String::new();
-                                    s.push_str(&match m.meeting_days {
-                                        MeetingDay::Repeated(r) => r.join(""),
-                                        MeetingDay::OneTime(r) => r,
-                                        MeetingDay::None => "N/A".to_string(),
-                                    });
-
-                                    s.push(' ');
-                                    s.push_str(&m.meeting_type);
-                                    s.push(' ');
-                                    s.push_str(&format!(
-                                        "{}:{:02} - {}:{:02}",
-                                        m.start_hr, m.start_min, m.end_hr, m.end_min
-                                    ));
-
-                                    s
-                                })
+                                .map(|m| m.to_flat_str())
                                 .collect::<Vec<_>>()
                                 .join("|")
                         )

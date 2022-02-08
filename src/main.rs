@@ -1,8 +1,10 @@
+mod export;
 mod schedule;
 mod tracker;
 mod util;
 mod webreg;
 
+use crate::export::exporter::export_all_sections;
 use crate::schedule::scheduler::{self, ScheduleConstraint};
 use crate::webreg::webreg_wrapper::{PlanAdd, SearchRequestBuilder, WebRegWrapper};
 use std::error::Error;
@@ -32,7 +34,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
     );
 
     if cfg!(debug_assertions) {
-        basic_intro(&w).await;
+        export_all_sections(&w).await;
+        //basic_intro(&w).await;
     } else {
         tracker::track::track_webreg_enrollment(
             &w,

@@ -8,4 +8,4 @@ target/
 
 # Misc. stuff
 cookie.txt
-enrollment.csv
+*.csv
