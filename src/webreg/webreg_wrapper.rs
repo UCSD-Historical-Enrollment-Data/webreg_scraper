@@ -928,21 +928,18 @@ impl<'a> WebRegWrapper<'a> {
                 ("termcode", self.term),
             ]);
 
-            let edit_resp = self
-                ._process_response(
-                    self.client
-                        .post(PLAN_EDIT)
-                        .form(&params_edit)
-                        .header(COOKIE, self.cookies)
-                        .header(USER_AGENT, MY_USER_AGENT)
-                        .send()
-                        .await,
-                )
-                .await;
-
-            if !edit_resp {
-                return false;
-            }
+            // This can potentially return "false" due to you not being able to enroll in the
+            // class, e.g. the class you're trying to plan is a major-restricted class.
+            self._process_response(
+                self.client
+                    .post(PLAN_EDIT)
+                    .form(&params_edit)
+                    .header(COOKIE, self.cookies)
+                    .header(USER_AGENT, MY_USER_AGENT)
+                    .send()
+                    .await,
+            )
+            .await;
         }
 
         let params_add: HashMap<&str, &str> = HashMap::from([

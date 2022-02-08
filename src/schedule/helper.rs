@@ -1,5 +1,31 @@
 use super::scheduler::Time;
 
+/// Calculates the time after a given offset.
+///
+/// # Parameters
+/// - `time`: The time.
+/// - `offset`: The offset.
+///
+/// # Returns
+/// The new `Time` with the specified offset accounted for.
+pub fn calculate_time_with_offset(time: Time, offset: i16) -> Time {
+    let (mut hr, mut min) = time;
+    min += offset;
+    if min >= 60 {
+        while min >= 60 {
+            hr += 1;
+            min -= 60;
+        }
+    } else if min < 0 {
+        while min < 0 {
+            hr -= 1;
+            min += 60;
+        }
+    }
+
+    (hr, min)
+}
+
 /// Checks if there is a time conflict between two time ranges.
 ///
 /// # Parameters
@@ -39,7 +65,44 @@ fn _time_conflicts(a_from: Time, a_to: Time, b_from: Time, b_to: Time) -> bool {
 }
 
 #[cfg(test)]
-mod tests {
+mod offset_tests {
+    use super::*;
+
+    const BASE_TIME: (i16, i16) = (5, 10);
+
+    #[test]
+    fn basic_offset() {
+        assert_eq!((5, 15), calculate_time_with_offset(BASE_TIME, 5));
+    }
+
+    #[test]
+    fn basic_offset_2() {
+        assert_eq!((5, 59), calculate_time_with_offset(BASE_TIME, 49));
+    }
+
+    #[test]
+    fn offset_over_pos_1() {
+        assert_eq!((6, 30), calculate_time_with_offset(BASE_TIME, 80));
+    }
+
+    #[test]
+    fn offset_over_pos_2() {
+        assert_eq!((7, 15), calculate_time_with_offset(BASE_TIME, 125));
+    }
+
+    #[test]
+    fn offset_over_neg_1() {
+        assert_eq!((4, 30), calculate_time_with_offset(BASE_TIME, -40));
+    }
+
+    #[test]
+    fn offset_over_neg_2() {
+        assert_eq!((3, 5), calculate_time_with_offset(BASE_TIME, -125));
+    }
+}
+
+#[cfg(test)]
+mod conflict_tests {
     use super::*;
 
     #[test]

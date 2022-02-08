@@ -3,7 +3,7 @@ mod tracker;
 mod util;
 mod webreg;
 
-use crate::schedule::scheduler;
+use crate::schedule::scheduler::{self, ScheduleConstraint};
 use crate::webreg::webreg_wrapper::{PlanAdd, SearchRequestBuilder, WebRegWrapper};
 use std::error::Error;
 use std::time::Duration;
@@ -88,9 +88,7 @@ async fn basic_intro(w: &WebRegWrapper<'_>) {
     // Search stuff.
     get_schedules(
         w,
-        &[
-            "POLI 27", "MATH 20E", "MATH 109", "CSE 12", "CSE 15L", "CSE 30",
-        ],
+        &["POLI 28", "CSE 130", "HISC 108", "MATH 180A"],
         false,
         false,
     )
@@ -122,7 +120,13 @@ async fn get_schedules(w: &WebRegWrapper<'_>, classes: &[&str], add_to_webreg: b
         }
     }
 
-    let schedules = scheduler::generate_schedules(classes, &search_res);
+    let schedules = scheduler::generate_schedules(
+        classes,
+        &search_res,
+        ScheduleConstraint::new()
+            .add_off_times("F", 12, 0, 12, 50)
+            .set_buffer_time(10),
+    );
 
     println!("{} schedules found.", schedules.len());
 

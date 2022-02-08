@@ -1,8 +1,8 @@
+use super::helper;
+use crate::webreg::webreg_clean_defn::{CourseSection, MeetingDay};
 use std::collections::{HashMap, HashSet};
 
-use crate::webreg::webreg_clean_defn::{CourseSection, MeetingDay};
-
-use super::helper;
+const DAY_OF_WEEK: [&str; 7] = ["Su", "M", "Tu", "W", "Th", "F", "Sa"];
 
 pub type Time = (i16, i16);
 
@@ -31,29 +31,66 @@ impl<'a> Schedule<'a> {
     ///
     /// # Parameters
     /// - `course`: The course to check.
+    /// - `constraints`: The constraints.
     ///
     /// # Returns
     /// `true` if this can be added and `false` otherwise.
-    pub fn can_add_course(&self, course: &CourseSection) -> bool {
+    pub fn can_add_course(&self, course: &CourseSection, constraints: &ScheduleConstraint) -> bool {
         if self.sections.contains_key(&course.subj_course_id.as_str()) {
             return false;
         }
 
+        let buffer_offset = match constraints.buffer_time {
+            Some(r) => r / 2,
+            None => 0,
+        };
+
+        let start_time = match constraints.earliest_start {
+            Some((h, m)) => h * 100 + m,
+            None => 0,
+        };
+
+        let end_time = match constraints.latest_end {
+            Some((h, m)) => h * 100 + m,
+            None => 2359,
+        };
+
         for meeting in &course.meetings {
             let new_from_time = (meeting.start_hr, meeting.start_min);
+            let new_from_time_full = meeting.start_hr * 100 + meeting.start_min;
             let new_to_time = (meeting.end_hr, meeting.end_min);
+            let new_to_time_full = meeting.end_hr * 100 + meeting.end_min;
 
             match meeting.meeting_days {
                 MeetingDay::Repeated(ref days) => {
+                    if new_from_time_full < start_time || new_to_time_full > end_time {
+                        return false;
+                    }
+
                     for day in days {
+                        if constraints.off_times.iter().any(|(d, a, b)| {
+                            d == day && helper::time_conflicts(new_from_time, new_to_time, *a, *b)
+                        }) {
+                            return false;
+                        }
+
                         match self.used_times.get(&day.as_str()) {
                             Some(times) => {
                                 for (from_time, to_time) in times {
                                     if helper::time_conflicts(
-                                        new_from_time,
-                                        new_to_time,
-                                        *from_time,
-                                        *to_time,
+                                        helper::calculate_time_with_offset(
+                                            new_from_time,
+                                            -buffer_offset,
+                                        ),
+                                        helper::calculate_time_with_offset(
+                                            new_to_time,
+                                            buffer_offset,
+                                        ),
+                                        helper::calculate_time_with_offset(
+                                            *from_time,
+                                            -buffer_offset,
+                                        ),
+                                        helper::calculate_time_with_offset(*to_time, buffer_offset),
                                     ) {
                                         return false;
                                     }
@@ -123,12 +160,14 @@ impl<'a> Schedule<'a> {
 /// # Parameters
 /// - `wanted_courses`: The desired courses.
 /// - `all_courses`: All courses to consider.
+/// - `constraints`: Constraints for the schedule generator.
 ///
 /// # Returns
 /// A vector containing all schedules.
 pub fn generate_schedules<'a>(
     wanted_courses: &[&str],
     all_courses: &'a [CourseSection],
+    constraints: ScheduleConstraint,
 ) -> Vec<Schedule<'a>> {
     // Step 1: Categorize all courses.
     let mut map: HashMap<&str, Vec<&CourseSection>> = HashMap::new();
@@ -158,10 +197,15 @@ pub fn generate_schedules<'a>(
                     }
 
                     added = true;
+                    let mut s = Schedule::new();
                     for course in all_courses {
-                        let mut s = Schedule::new();
+                        if !s.can_add_course(course, &constraints) {
+                            continue;
+                        }
+
                         s.add_course(course);
                         curr_schedules.push(s);
+                        s = Schedule::new();
                     }
 
                     continue;
@@ -170,7 +214,7 @@ pub fn generate_schedules<'a>(
                 let mut sch_to_add: Vec<Schedule<'a>> = vec![];
                 for temp_schedule in &curr_schedules {
                     for course in all_courses {
-                        if !temp_schedule.can_add_course(course) {
+                        if !temp_schedule.can_add_course(course, &constraints) {
                             continue;
                         }
 
@@ -195,4 +239,113 @@ pub fn generate_schedules<'a>(
     }
 
     all_schedules
+}
+
+/// Constraints for your schedule. Note that this will *not* affect finals time.
+pub struct ScheduleConstraint<'a> {
+    /// The earliest time any class is allowed to start.
+    earliest_start: Option<Time>,
+    /// The latest time any class can end.
+    latest_end: Option<Time>,
+    /// Time between two classes. Note that there is an implicit 10 minute buffer
+    /// between classes (e.g. 1:00-1:50, 2:00-2:50)
+    buffer_time: Option<i16>,
+    /// Any time ranges that you do not want to have classes, discussions, etc.
+    off_times: Vec<(&'a str, Time, Time)>,
+}
+
+impl<'a> ScheduleConstraint<'a> {
+    /// Creates a new `ScheduleConstraint` structure instance.
+    ///
+    /// # Returns
+    /// This new instance.
+    pub fn new() -> Self {
+        ScheduleConstraint {
+            earliest_start: None,
+            latest_end: None,
+            buffer_time: None,
+            off_times: vec![],
+        }
+    }
+
+    /// Set the earliest time that any given class can start.
+    ///
+    /// # Parameters
+    /// - `hour`: The hour. Must be between 0 and 23, inclusive.
+    /// - `min`: The minute. Must be between 0 and 59, inclusive.
+    ///
+    /// # Returns
+    /// This instance.
+    pub fn set_earliest_time(mut self, hour: i16, min: i16) -> ScheduleConstraint<'a> {
+        if !self._validate_time(hour, min) {
+            return self;
+        }
+
+        self.earliest_start = Some((hour, min));
+        self
+    }
+
+    /// Set the latest time that any given class can end.
+    ///
+    /// # Parameters
+    /// - `hour`: The hour. Must be between 0 and 23, inclusive.
+    /// - `min`: The minute. Must be between 0 and 59, inclusive.
+    ///
+    /// # Returns
+    /// This instance.
+    pub fn set_latest_time(mut self, hour: i16, min: i16) -> ScheduleConstraint<'a> {
+        if !self._validate_time(hour, min) {
+            return self;
+        }
+
+        self.latest_end = Some((hour, min));
+        self
+    }
+
+    /// Sets the buffer time.
+    ///
+    /// # Parameters
+    /// - `buffer`: The buffer time.
+    ///
+    /// # Returns
+    /// This instance.
+    pub fn set_buffer_time(mut self, buffer: i16) -> ScheduleConstraint<'a> {
+        self.buffer_time = Some(buffer.abs());
+        self
+    }
+
+    /// Adds an off-time, or a time range when you don't want classes.
+    ///
+    /// # Parameters
+    /// - `day`: The day of week.
+    /// - `start_hour`: The start hour. Must be between 0 and 23, inclusive.
+    /// - `start_min`: The start minute. Must be between 0 and 59, inclusive.
+    /// - `end_hour`: The end hour. Must be between 0 and 23, inclusive.
+    /// - `end_min`: The end minute. Must be between 0 and 59, inclusive.
+    ///
+    /// # Returns
+    /// This instance.
+    pub fn add_off_times(
+        mut self,
+        day: &'a str,
+        start_hour: i16,
+        start_min: i16,
+        end_hour: i16,
+        end_min: i16,
+    ) -> ScheduleConstraint<'a> {
+        if !self._validate_time(start_hour, start_min)
+            || !self._validate_time(end_hour, end_min)
+            || !DAY_OF_WEEK.contains(&day)
+        {
+            return self;
+        }
+
+        self.off_times
+            .push((day, (start_hour, start_min), (end_hour, end_min)));
+        self
+    }
+
+    fn _validate_time(&self, hour: i16, min: i16) -> bool {
+        (0..=23).contains(&hour) && (0..=59).contains(&min)
+    }
 }
