@@ -9,7 +9,9 @@ pub type Time = (i16, i16);
 #[derive(Clone, Debug)]
 pub struct Schedule<'a> {
     /// All relevant sections.
-    pub sections: HashMap<&'a str, &'a CourseSection>,
+    pub sections: Vec<&'a CourseSection>,
+    /// All seen courses.
+    pub seen: HashSet<&'a str>,
     /// All used times. This can either be one of Sun, M, ..., F, Sa or
     /// a specified day (e.g. 2022-02-02).
     used_times: HashMap<&'a str, HashSet<(Time, Time)>>,
@@ -22,7 +24,8 @@ impl<'a> Schedule<'a> {
     /// The new `Schedule`.
     pub fn new() -> Self {
         Schedule {
-            sections: HashMap::new(),
+            sections: vec![],
+            seen: HashSet::new(),
             used_times: HashMap::new(),
         }
     }
@@ -36,7 +39,7 @@ impl<'a> Schedule<'a> {
     /// # Returns
     /// `true` if this can be added and `false` otherwise.
     pub fn can_add_course(&self, course: &CourseSection, constraints: &ScheduleConstraint) -> bool {
-        if self.sections.contains_key(&course.subj_course_id.as_str()) {
+        if self.seen.contains(&course.subj_course_id.as_str()) {
             return false;
         }
 
@@ -128,7 +131,8 @@ impl<'a> Schedule<'a> {
     /// # Parameters
     /// - `course`: The course to add.
     pub fn add_course(&mut self, course: &'a CourseSection) {
-        self.sections.insert(course.subj_course_id.as_str(), course);
+        self.seen.insert(course.subj_course_id.as_str());
+        self.sections.push(course);
         for meeting in &course.meetings {
             let end_time = (meeting.end_hr, meeting.end_min);
             let start_time = (meeting.start_hr, meeting.start_min);

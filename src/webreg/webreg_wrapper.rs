@@ -1154,7 +1154,7 @@ impl<'a> WebRegWrapper<'a> {
     }
 
     /// Gets the current term.
-    /// 
+    ///
     /// # Returns
     /// The current term.
     pub fn get_term(&self) -> &'a str {

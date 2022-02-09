@@ -78,7 +78,7 @@ pub enum MeetingDay {
 
 impl Meeting {
     /// Returns a flat string representation of this `Meeting`
-    /// 
+    ///
     /// # Returns
     /// A flat string representation of this `Meeting`. Useful for CSV files.
     pub fn to_flat_str(&self) -> String {
@@ -88,7 +88,7 @@ impl Meeting {
             MeetingDay::OneTime(r) => r.to_string(),
             MeetingDay::None => "N/A".to_string(),
         });
-    
+
         s.push(' ');
         s.push_str(self.meeting_type.as_str());
         s.push(' ');
@@ -96,7 +96,7 @@ impl Meeting {
             "{}:{:02} - {}:{:02}",
             self.start_hr, self.start_min, self.end_hr, self.end_min
         ));
-    
+
         s
     }
 }

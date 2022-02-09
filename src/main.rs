@@ -4,11 +4,11 @@ mod tracker;
 mod util;
 mod webreg;
 
-use crate::export::exporter::export_all_sections;
+use crate::export::exporter::save_schedules;
 use crate::schedule::scheduler::{self, ScheduleConstraint};
 use crate::webreg::webreg_wrapper::{PlanAdd, SearchRequestBuilder, WebRegWrapper};
 use std::error::Error;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<(), Box<dyn Error>> {
@@ -34,8 +34,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
     );
 
     if cfg!(debug_assertions) {
-        export_all_sections(&w).await;
-        //basic_intro(&w).await;
+        //export::exporter::export_all_sections(&w).await;
+        basic_intro(&w).await;
     } else {
         tracker::track::track_webreg_enrollment(
             &w,
@@ -94,6 +94,7 @@ async fn basic_intro(w: &WebRegWrapper<'_>) {
         &["POLI 28", "CSE 130", "HISC 108", "MATH 180A"],
         false,
         false,
+        true,
     )
     .await;
 }
@@ -105,7 +106,14 @@ async fn basic_intro(w: &WebRegWrapper<'_>) {
 /// - `classes`: All classes to check.
 /// - `add_to_webreg`: Whether to add your schedules to WebReg.
 /// - `print`: Whether to print the schedules (set to `false` if you don't need to see the schedules)
-async fn get_schedules(w: &WebRegWrapper<'_>, classes: &[&str], add_to_webreg: bool, print: bool) {
+/// - `save_to_file`: Whether to save your schedules to a file. If this is selected, the other options are ignored.
+async fn get_schedules(
+    w: &WebRegWrapper<'_>,
+    classes: &[&str],
+    add_to_webreg: bool,
+    print: bool,
+    save_to_file: bool,
+) {
     if classes.is_empty() {
         return;
     }
@@ -123,15 +131,19 @@ async fn get_schedules(w: &WebRegWrapper<'_>, classes: &[&str], add_to_webreg: b
         }
     }
 
-    let schedules = scheduler::generate_schedules(
-        classes,
-        &search_res,
-        ScheduleConstraint::new()
-            .add_off_times("F", 12, 0, 12, 50)
-            .set_buffer_time(10),
+    let dur = Instant::now();
+    let schedules = scheduler::generate_schedules(classes, &search_res, ScheduleConstraint::new());
+
+    println!(
+        "{} schedules found in {} seconds.",
+        schedules.len(),
+        dur.elapsed().as_secs_f32()
     );
 
-    println!("{} schedules found.", schedules.len());
+    if save_to_file {
+        save_schedules(&schedules);
+        return;
+    }
 
     if !add_to_webreg && !print {
         return;
@@ -150,7 +162,7 @@ async fn get_schedules(w: &WebRegWrapper<'_>, classes: &[&str], add_to_webreg: b
             }
         );
 
-        for (_, section) in schedule.sections {
+        for section in schedule.sections {
             if add_to_webreg {
                 let (sub, code) = section.subj_course_id.split_once(" ").unwrap();
                 // TODO add_to_plan doesn't seem to work fully (see CSE 130)
