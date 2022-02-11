@@ -118,8 +118,5 @@ pub async fn track_webreg_enrollment(
             // Just to be nice to webreg
             tokio::time::sleep(Duration::from_secs(3)).await;
         }
-
-        wrapper.ping_server().await;
-        println!("[{}] Pinged WebReg servers.", get_pretty_time());
     }
 }

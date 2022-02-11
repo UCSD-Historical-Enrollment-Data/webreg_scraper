@@ -1033,7 +1033,8 @@ impl<'a> WebRegWrapper<'a> {
                     .to_string()
                 });
 
-                let json: Value = serde_json::from_str(&text).unwrap();
+                // TODO randomly crashed here, need to fix.
+                let json: Value = serde_json::from_str(&text).unwrap_or_default();
                 json["SESSION_OK"].is_boolean() && json["SESSION_OK"].as_bool().unwrap()
             }
         }
