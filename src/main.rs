@@ -6,7 +6,9 @@ mod webreg;
 
 use crate::export::exporter::save_schedules;
 use crate::schedule::scheduler::{self, ScheduleConstraint};
-use crate::webreg::webreg_wrapper::{PlanAdd, SearchRequestBuilder, WebRegWrapper};
+use crate::webreg::webreg_wrapper::{
+    CourseLevelFilter, PlanAdd, SearchRequestBuilder, WebRegWrapper,
+};
 use std::error::Error;
 use std::time::{Duration, Instant};
 
@@ -41,7 +43,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
             &w,
             &SearchRequestBuilder::new()
                 .add_subject("CSE")
-                .add_subject("COGS"),
+                .add_subject("COGS")
+                .add_subject("MATH")
+                .add_subject("ECE")
+                .filter_courses_by(CourseLevelFilter::LowerDivision)
+                .filter_courses_by(CourseLevelFilter::UpperDivision),
         )
         .await;
     }
