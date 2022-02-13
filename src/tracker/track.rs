@@ -84,11 +84,12 @@ pub async fn track_webreg_enrollment(
                         r[0].subj_course_id
                     );
 
+                    let time = get_epoch_time();
                     r.into_iter().for_each(|c| {
                         writeln!(
                             writer,
                             "{},{},{},{},{},{},{},{}",
-                            get_epoch_time(),
+                            time,
                             c.subj_course_id,
                             c.section_code,
                             c.section_id,
