@@ -19,7 +19,7 @@ pub async fn track_webreg_enrollment(
 ) {
     let file_name = format!(
         "enrollment_{}.csv",
-        chrono::offset::Local::now().format("%FT%T")
+        chrono::offset::Local::now().format("%FT%H_%M_%S")
     );
     let is_new = !Path::new(&file_name).exists();
 
