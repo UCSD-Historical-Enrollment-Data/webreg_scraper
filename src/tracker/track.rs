@@ -21,8 +21,7 @@ pub async fn track_webreg_enrollment(
         "enrollment_{}.csv",
         chrono::offset::Local::now().format("%FT%T")
     );
-    let is_new = !Path::new(&file_name)
-    .exists();
+    let is_new = !Path::new(&file_name).exists();
 
     let f = OpenOptions::new()
         .append(true)
