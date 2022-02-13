@@ -6,8 +6,6 @@ use std::path::Path;
 use std::time::Duration;
 use tokio;
 
-const ENROLLMENT_NAME: &str = "enrollment.csv";
-
 /// Tracks WebReg for enrollment information. This will continuously check specific courses for
 /// their enrollment information (number of students waitlisted/enrolled, total seats) along with
 /// basic course information and store this in a CSV file for later processing.
@@ -19,19 +17,24 @@ pub async fn track_webreg_enrollment(
     wrapper: &WebRegWrapper<'_>,
     search_res: &SearchRequestBuilder<'_>,
 ) {
-    let is_new = !Path::new(ENROLLMENT_NAME).exists();
+    let file_name = format!(
+        "enrollment_{}.csv",
+        chrono::offset::Local::now().format("%FT%T")
+    );
+    let is_new = !Path::new(&file_name)
+    .exists();
 
     let f = OpenOptions::new()
         .append(true)
         .create(true)
-        .open(ENROLLMENT_NAME)
+        .open(&file_name)
         .expect("could not open or create 'enrollment.csv'");
 
     let mut writer = BufWriter::new(f);
     if is_new {
         writeln!(
             writer,
-            "time,subj_course_id,sec_code,sec_id,prof,available,waitlist,total,meetings"
+            "time,subj_course_id,sec_code,sec_id,prof,available,waitlist,total"
         )
         .unwrap();
     }
@@ -85,7 +88,7 @@ pub async fn track_webreg_enrollment(
                     r.into_iter().for_each(|c| {
                         writeln!(
                             writer,
-                            "{},{},{},{},{},{},{},{},{}",
+                            "{},{},{},{},{},{},{},{}",
                             get_epoch_time(),
                             c.subj_course_id,
                             c.section_code,
@@ -95,11 +98,6 @@ pub async fn track_webreg_enrollment(
                             c.available_seats,
                             c.waitlist_ct,
                             c.total_seats,
-                            c.meetings
-                                .into_iter()
-                                .map(|m| m.to_flat_str())
-                                .collect::<Vec<_>>()
-                                .join("|")
                         )
                         .unwrap()
                     });
