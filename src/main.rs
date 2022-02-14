@@ -84,7 +84,10 @@ async fn basic_intro(w: &WebRegWrapper<'_>) {
     const SUBJECT_CODE: &str = "MAE";
     const COURSE_CODE: &str = "30B";
     // Search stuff.
-    let enrollment_count_vec = w.get_enrollment_count(SUBJECT_CODE, COURSE_CODE).await.unwrap();
+    let enrollment_count_vec = w
+        .get_enrollment_count(SUBJECT_CODE, COURSE_CODE)
+        .await
+        .unwrap();
     let ct_a = enrollment_count_vec.len();
     for c in enrollment_count_vec {
         println!("{}", c.to_string().trim());
@@ -99,6 +102,12 @@ async fn basic_intro(w: &WebRegWrapper<'_>) {
 
     println!("=============================");
     println!("{} enrollment count vs. {} sections parsed.", ct_a, ct_b);
+
+    println!("=============================");
+    let schedule = w.get_schedule(Some("Test")).await.unwrap();
+    for s in schedule {
+        println!("{}", s.to_string());
+    }
 }
 
 /// Gets possible schedules, optionally adding them to WebReg.

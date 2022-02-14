@@ -149,19 +149,6 @@ impl<'a> WebRegWrapper<'a> {
                     return Some(vec![]);
                 }
 
-                let mut most_occurring_start_dates: HashMap<&str, u32> = HashMap::new();
-                for m in &parsed {
-                    *most_occurring_start_dates.entry(&m.start_date).or_insert(0) += 1;
-                }
-
-                // Presumably, any lecture or "main" section will have the most common starting
-                // date.
-                let common_date = most_occurring_start_dates
-                    .into_iter()
-                    .max_by_key(|&(_, c)| c)
-                    .unwrap()
-                    .0;
-
                 let mut base_group_secs: HashMap<&str, Vec<&ScheduledMeeting>> = HashMap::new();
                 let mut special_classes: HashMap<&str, Vec<&ScheduledMeeting>> = HashMap::new();
                 for s_meeting in &parsed {
@@ -192,7 +179,10 @@ impl<'a> WebRegWrapper<'a> {
                     // plus some courses may not have a lecture.
                     let all_main = sch_meetings
                         .iter()
-                        .filter(|x| x.sect_code.ends_with("00") && x.start_date == common_date)
+                        .filter(|x| {
+                            x.sect_code.ends_with("00")
+                                && x.special_meeting.replace("TBA", "").trim().is_empty()
+                        })
                         .collect::<Vec<_>>();
                     assert!(
                         !all_main.is_empty()
@@ -200,26 +190,26 @@ impl<'a> WebRegWrapper<'a> {
                                 .iter()
                                 .all(|x| x.meeting_type == all_main[0].meeting_type)
                     );
-                    let day_code = all_main
-                        .iter()
-                        .map(|x| x.day_code.trim())
-                        .collect::<Vec<_>>()
-                        .join("");
 
-                    let mut all_meetings: Vec<Meeting> = vec![Meeting {
-                        meeting_type: all_main[0].meeting_type.to_string(),
-                        meeting_days: if day_code.is_empty() {
-                            MeetingDay::None
-                        } else {
-                            MeetingDay::Repeated(webreg_helper::parse_day_code(&day_code))
-                        },
-                        start_min: all_main[0].start_time_min,
-                        start_hr: all_main[0].start_time_hr,
-                        end_min: all_main[0].end_time_min,
-                        end_hr: all_main[0].end_time_hr,
-                        building: all_main[0].bldg_code.trim().to_string(),
-                        room: all_main[0].room_code.trim().to_string(),
-                    }];
+                    let mut all_meetings: Vec<Meeting> = vec![];
+                    for main in all_main {
+                        all_meetings.push(Meeting {
+                            meeting_type: main.meeting_type.to_string(),
+                            meeting_days: if main.day_code.trim().is_empty() {
+                                MeetingDay::None
+                            } else {
+                                MeetingDay::Repeated(webreg_helper::parse_day_code(
+                                    main.day_code.trim(),
+                                ))
+                            },
+                            start_min: main.start_time_min,
+                            start_hr: main.start_time_hr,
+                            end_min: main.end_time_min,
+                            end_hr: main.end_time_hr,
+                            building: main.bldg_code.trim().to_string(),
+                            room: main.room_code.trim().to_string(),
+                        });
+                    }
 
                     // TODO calculate waitlist somehow
                     // Calculate the remaining meetings. other_special consists of midterms and
@@ -227,7 +217,10 @@ impl<'a> WebRegWrapper<'a> {
                     // section (e.g. A02 & A03 are in A00)
                     sch_meetings
                         .iter()
-                        .filter(|x| x.sect_code.ends_with("00") && x.start_date != common_date)
+                        .filter(|x| {
+                            x.sect_code.ends_with("00")
+                                && !x.special_meeting.replace("TBA", "").trim().is_empty()
+                        })
                         .map(|x| Meeting {
                             meeting_type: x.meeting_type.to_string(),
                             meeting_days: MeetingDay::OneTime(x.start_date.to_string()),
@@ -587,7 +580,8 @@ impl<'a> WebRegWrapper<'a> {
                         .filter(|x| {
                             x.sect_code == main_id
                                 && x.special_meeting.replace("TBA", "").trim().is_empty()
-                        }).for_each(|x| group.main_meeting.push(x));
+                        })
+                        .for_each(|x| group.main_meeting.push(x));
 
                     assert!(!group.main_meeting.is_empty());
 
@@ -622,9 +616,8 @@ impl<'a> WebRegWrapper<'a> {
                 for group in all_groups {
                     let mut main_meetings: Vec<Meeting> = vec![];
                     for meeting in &group.main_meeting {
-                        let (m_m_type, m_days) =
-                            webreg_helper::parse_meeting_type_date(meeting);
-    
+                        let (m_m_type, m_days) = webreg_helper::parse_meeting_type_date(meeting);
+
                         main_meetings.push(Meeting {
                             meeting_type: m_m_type.to_string(),
                             meeting_days: m_days,
@@ -636,7 +629,6 @@ impl<'a> WebRegWrapper<'a> {
                             end_min: meeting.end_time_min,
                         });
                     }
-
 
                     let other_meetings = group
                         .other_special_meetings
@@ -660,7 +652,9 @@ impl<'a> WebRegWrapper<'a> {
                     // It's possible that there are no discussions, just a lecture
                     if group.child_meetings.is_empty() {
                         let mut all_meetings: Vec<Meeting> = vec![];
-                        main_meetings.iter().for_each(|m| all_meetings.push(m.clone()));
+                        main_meetings
+                            .iter()
+                            .for_each(|m| all_meetings.push(m.clone()));
 
                         other_meetings
                             .iter()
@@ -671,8 +665,7 @@ impl<'a> WebRegWrapper<'a> {
                             subj_course_id: course_dept_id.clone(),
                             section_id: group.main_meeting[0].section_number.trim().to_string(),
                             section_code: group.main_meeting[0].sect_code.trim().to_string(),
-                            instructor: group
-                                .main_meeting[0]
+                            instructor: group.main_meeting[0]
                                 .person_full_name
                                 .split_once(';')
                                 .unwrap()
@@ -693,7 +686,9 @@ impl<'a> WebRegWrapper<'a> {
                         let (m_type, t_m_dats) = webreg_helper::parse_meeting_type_date(meeting);
 
                         let mut all_meetings: Vec<Meeting> = vec![];
-                        main_meetings.iter().for_each(|m| all_meetings.push(m.clone()));
+                        main_meetings
+                            .iter()
+                            .for_each(|m| all_meetings.push(m.clone()));
                         all_meetings.push(Meeting {
                             meeting_type: m_type.to_string(),
                             meeting_days: t_m_dats,
@@ -704,7 +699,7 @@ impl<'a> WebRegWrapper<'a> {
                             building: meeting.bldg_code.trim().to_string(),
                             room: meeting.room_code.trim().to_string(),
                         });
-                        
+
                         other_meetings
                             .iter()
                             .for_each(|x| all_meetings.push(x.clone()));

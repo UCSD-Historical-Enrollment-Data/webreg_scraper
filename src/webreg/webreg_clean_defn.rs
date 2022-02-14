@@ -1,3 +1,5 @@
+use std::cmp::max;
+
 use serde::Serialize;
 
 /// A section, which consists of a lecture, usually a discussion, and usually a final.
@@ -162,7 +164,7 @@ impl ToString for ScheduledSection {
         };
 
         let mut s = format!(
-            "[{} / {}] {} ({} {}) with {} - {} ({} Units, {} Grading)\n",
+            "[{} / {}] {} ({} {}) with {} - {} ({} Units, {} Grading, {} / {})\n",
             self.section_code,
             self.section_number,
             self.course_title,
@@ -171,7 +173,9 @@ impl ToString for ScheduledSection {
             self.instructor,
             status,
             self.units,
-            self.grade_option
+            self.grade_option,
+            max(self.section_capacity - self.enrolled_count, -1),
+            self.section_capacity
         );
 
         for meeting in &self.meetings {
