@@ -576,19 +576,20 @@ impl<'a> WebRegWrapper<'a> {
 
                     seen.insert(main_id);
                     let letter = main_id.chars().into_iter().next().unwrap();
-                    let idx_of_main = unprocessed_sections
-                        .iter()
-                        .position(|x| {
-                            x.sect_code == main_id
-                                && x.special_meeting.replace("TBA", "").trim().is_empty()
-                        })
-                        .expect("This should not have happened!");
-
                     let mut group = GroupedSection {
-                        main_meeting: &unprocessed_sections[idx_of_main],
+                        main_meeting: vec![],
                         child_meetings: vec![],
                         other_special_meetings: vec![],
                     };
+
+                    unprocessed_sections
+                        .iter()
+                        .filter(|x| {
+                            x.sect_code == main_id
+                                && x.special_meeting.replace("TBA", "").trim().is_empty()
+                        }).for_each(|x| group.main_meeting.push(x));
+
+                    assert!(!group.main_meeting.is_empty());
 
                     // Want all sections with section code starting with the same letter as what
                     // the main section code is. So, if main_id is A00, we want all sections that
@@ -619,19 +620,23 @@ impl<'a> WebRegWrapper<'a> {
 
                 // Process each group
                 for group in all_groups {
-                    let (m_m_type, m_days) =
-                        webreg_helper::parse_meeting_type_date(group.main_meeting);
+                    let mut main_meetings: Vec<Meeting> = vec![];
+                    for meeting in &group.main_meeting {
+                        let (m_m_type, m_days) =
+                            webreg_helper::parse_meeting_type_date(meeting);
+    
+                        main_meetings.push(Meeting {
+                            meeting_type: m_m_type.to_string(),
+                            meeting_days: m_days,
+                            building: meeting.bldg_code.trim().to_string(),
+                            room: meeting.room_code.trim().to_string(),
+                            start_hr: meeting.start_time_hr,
+                            start_min: meeting.start_time_min,
+                            end_hr: meeting.end_time_hr,
+                            end_min: meeting.end_time_min,
+                        });
+                    }
 
-                    let main_meeting = Meeting {
-                        meeting_type: m_m_type.to_string(),
-                        meeting_days: m_days,
-                        building: group.main_meeting.bldg_code.trim().to_string(),
-                        room: group.main_meeting.room_code.trim().to_string(),
-                        start_hr: group.main_meeting.start_time_hr,
-                        start_min: group.main_meeting.start_time_min,
-                        end_hr: group.main_meeting.end_time_hr,
-                        end_min: group.main_meeting.end_time_min,
-                    };
 
                     let other_meetings = group
                         .other_special_meetings
@@ -654,27 +659,29 @@ impl<'a> WebRegWrapper<'a> {
 
                     // It's possible that there are no discussions, just a lecture
                     if group.child_meetings.is_empty() {
-                        let mut all_meetings: Vec<Meeting> = vec![main_meeting.clone()];
+                        let mut all_meetings: Vec<Meeting> = vec![];
+                        main_meetings.iter().for_each(|m| all_meetings.push(m.clone()));
 
                         other_meetings
                             .iter()
                             .for_each(|x| all_meetings.push(x.clone()));
 
+                        // Just lecture = enrollment stats will be reflected properly on this meeting.
                         sections.push(CourseSection {
                             subj_course_id: course_dept_id.clone(),
-                            section_id: group.main_meeting.section_number.trim().to_string(),
-                            section_code: group.main_meeting.sect_code.trim().to_string(),
+                            section_id: group.main_meeting[0].section_number.trim().to_string(),
+                            section_code: group.main_meeting[0].sect_code.trim().to_string(),
                             instructor: group
-                                .main_meeting
+                                .main_meeting[0]
                                 .person_full_name
                                 .split_once(';')
                                 .unwrap()
                                 .0
                                 .trim()
                                 .to_string(),
-                            available_seats: max(group.main_meeting.avail_seat, 0),
-                            total_seats: group.main_meeting.section_capacity,
-                            waitlist_ct: group.main_meeting.count_on_waitlist,
+                            available_seats: max(group.main_meeting[0].avail_seat, 0),
+                            total_seats: group.main_meeting[0].section_capacity,
+                            waitlist_ct: group.main_meeting[0].count_on_waitlist,
                             meetings: all_meetings,
                         });
 
@@ -685,19 +692,19 @@ impl<'a> WebRegWrapper<'a> {
                     for meeting in group.child_meetings {
                         let (m_type, t_m_dats) = webreg_helper::parse_meeting_type_date(meeting);
 
-                        let mut all_meetings: Vec<Meeting> = vec![
-                            main_meeting.clone(),
-                            Meeting {
-                                meeting_type: m_type.to_string(),
-                                meeting_days: t_m_dats,
-                                start_min: meeting.start_time_min,
-                                start_hr: meeting.start_time_hr,
-                                end_min: meeting.end_time_min,
-                                end_hr: meeting.end_time_hr,
-                                building: meeting.bldg_code.trim().to_string(),
-                                room: meeting.room_code.trim().to_string(),
-                            },
-                        ];
+                        let mut all_meetings: Vec<Meeting> = vec![];
+                        main_meetings.iter().for_each(|m| all_meetings.push(m.clone()));
+                        all_meetings.push(Meeting {
+                            meeting_type: m_type.to_string(),
+                            meeting_days: t_m_dats,
+                            start_min: meeting.start_time_min,
+                            start_hr: meeting.start_time_hr,
+                            end_min: meeting.end_time_min,
+                            end_hr: meeting.end_time_hr,
+                            building: meeting.bldg_code.trim().to_string(),
+                            room: meeting.room_code.trim().to_string(),
+                        });
+                        
                         other_meetings
                             .iter()
                             .for_each(|x| all_meetings.push(x.clone()));
@@ -1288,7 +1295,7 @@ impl<'a> WebRegWrapper<'a> {
 // Helper structure for organizing meetings. Only used once for now.
 #[derive(Debug)]
 struct GroupedSection<'a, T> {
-    main_meeting: &'a T,
+    main_meeting: Vec<&'a T>,
     child_meetings: Vec<&'a T>,
     other_special_meetings: Vec<&'a T>,
 }
