@@ -95,14 +95,10 @@ async fn basic_intro(w: &WebRegWrapper<'_>) {
     println!("Schedules: {:?}", w.get_schedules().await.unwrap());
 
     // Search stuff.
-    get_schedules(
-        w,
-        &["POLI 28", "CSE 130", "HISC 108", "MATH 180A"],
-        false,
-        false,
-        true,
-    )
-    .await;
+    let enrollment_count_vec = w.get_enrollment_count("CSE", "198").await.unwrap();
+    for c in enrollment_count_vec {
+        println!("{}", c.to_string());
+    }
 }
 
 /// Gets possible schedules, optionally adding them to WebReg.

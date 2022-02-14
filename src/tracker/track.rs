@@ -64,7 +64,7 @@ pub async fn track_webreg_enrollment(
 
         for r in results {
             let res = wrapper
-                .get_course_info(r.subj_code.trim(), r.course_code.trim())
+                .get_enrollment_count(r.subj_code.trim(), r.course_code.trim())
                 .await;
             match res {
                 None => {

@@ -347,7 +347,88 @@ impl<'a> WebRegWrapper<'a> {
         }
     }
 
-    /// Gets enrollment information on a particular course.
+    /// Gets enrollment count for a particular course.
+    ///
+    /// Unlike the `get_course_info` function, this function only returns a vector of sections
+    /// with the proper enrollment counts. Therefore, the `meetings` vector will always be
+    /// empty as it is not relevant. If you want full course information, use `get_course_info`.
+    /// If you only care about the number of people enrolled in a section, this function is
+    /// for you.
+    ///
+    /// # Parameters
+    /// - `subject_code`: The subject code. For example, if you wanted to check `MATH 100B`, you
+    /// would put `MATH`.
+    /// - `course_code`: The course code. For example, if you wanted to check `MATH 100B`, you
+    /// would put `100B`.
+    ///
+    /// # Returns
+    /// An option containing either:
+    /// - A vector with all possible sections that match the given subject code & course code.
+    /// - Or nothing.
+    pub async fn get_enrollment_count(
+        &self,
+        subject_code: &str,
+        course_code: &str,
+    ) -> Option<Vec<CourseSection>> {
+        let crsc_code = self._get_formatted_course_code(course_code);
+        let url = Url::parse_with_params(
+            COURSE_DATA,
+            &[
+                ("subjcode", subject_code),
+                ("crsecode", &*crsc_code),
+                ("termcode", self.term),
+            ],
+        )
+        .unwrap();
+
+        let res = self
+            .client
+            .get(url)
+            .header(COOKIE, self.cookies)
+            .header(USER_AGENT, MY_USER_AGENT)
+            .send()
+            .await;
+
+        match res {
+            Err(_) => None,
+            Ok(r) => {
+                if !r.status().is_success() {
+                    return None;
+                }
+
+                let text = r.text().await.unwrap_or_else(|_| "".to_string());
+                if text.is_empty() {
+                    return None;
+                }
+                
+                Some(
+                    serde_json::from_str::<Vec<WebRegMeeting>>(&text)
+                        .unwrap_or_default()
+                        .into_iter()
+                        .filter(|x| x.display_type == "AC")
+                        .map(|x| CourseSection {
+                            subj_course_id: format!("{} {}", subject_code.trim(), course_code.trim()).to_uppercase(),
+                            section_id: x.section_number.trim().to_string(),
+                            section_code: x.sect_code.trim().to_string(),
+                            instructor: x
+                                .person_full_name
+                                .split_once(';')
+                                .unwrap()
+                                .0
+                                .trim()
+                                .to_string(),
+                            available_seats: max(x.avail_seat, 0),
+                            total_seats: x.section_capacity,
+                            waitlist_ct: x.count_on_waitlist,
+                            meetings: vec![],
+                        })
+                        .collect(),
+                )
+            }
+        }
+    }
+
+    /// Gets course information for a particular course.
     ///
     /// Note that WebReg provides this information in a way that makes it hard to use; in
     /// particular, WebReg separates each lecture, discussion, final exam, etc. from each other.
