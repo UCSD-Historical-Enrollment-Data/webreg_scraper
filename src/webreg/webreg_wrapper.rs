@@ -506,9 +506,9 @@ impl<'a> WebRegWrapper<'a> {
                             }
 
                             // Probably a discussion
-                            if x.start_date == x.section_start_date
-                                && special_meeting.trim().is_empty()
-                            {
+                            // Original if-condition:
+                            // (x.start_date == x.section_start_date && special_meeting.trim().is_empty())
+                            if x.sect_code != main_id {
                                 group.child_meetings.push(x);
                                 return;
                             }

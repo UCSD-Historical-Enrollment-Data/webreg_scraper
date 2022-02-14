@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 mod export;
 mod schedule;
 mod tracker;
