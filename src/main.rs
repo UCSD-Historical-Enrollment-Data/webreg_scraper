@@ -36,7 +36,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
     );
 
     if cfg!(debug_assertions) {
-        //export::exporter::export_all_sections(&w).await;
         basic_intro(&w).await;
     } else {
         tracker::track::track_webreg_enrollment(
