@@ -1,0 +1,16 @@
+{
+  "name": "webregautoin",
+  "version": "0.1.0",
+  "description": "Automatically logs into WebReg and provides the cookies.",
+  "main": "index.js",
+  "scripts": {
+    "compile": "tsc -p .",
+    "start": "npm run compile && node out/index.js"
+  },
+  "keywords": [],
+  "author": "Edward Wang",
+  "license": "MIT",
+  "dependencies": {
+    "puppeteer": "^13.3.1"
+  }
+}
