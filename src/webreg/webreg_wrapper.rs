@@ -165,7 +165,8 @@ impl<'a> WebRegWrapper<'a> {
                 let mut base_group_secs: HashMap<&str, Vec<&ScheduledMeeting>> = HashMap::new();
                 let mut special_classes: HashMap<&str, Vec<&ScheduledMeeting>> = HashMap::new();
                 for s_meeting in &parsed {
-                    if webreg_helper::is_useless_section(&s_meeting.sect_code) {
+                    if s_meeting.enrolled_count == Some(0) && s_meeting.section_capacity == Some(0)
+                    {
                         continue;
                     }
 
@@ -445,12 +446,12 @@ impl<'a> WebRegWrapper<'a> {
                         continue;
                     }
 
-                    // If the first char of the section code is a letter and the second char of the
-                    // section code is a number that is greater than or equal to 5, this is
-                    // probably a special meeting (like tutorial, lab, etc.)
-                    //
-                    // For now, omit it
-                    if webreg_helper::is_useless_section(&webreg_meeting.sect_code) {
+                    // If the component cannot be enrolled in,
+                    // AND the section code doesn't end with '00'
+                    // Then it's useless for us
+                    if webreg_meeting.display_type != "AC"
+                        && !webreg_meeting.sect_code.ends_with("00")
+                    {
                         continue;
                     }
 

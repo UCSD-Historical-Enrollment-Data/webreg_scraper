@@ -130,6 +130,13 @@ pub struct WebRegMeeting {
     /// The date that this section officially starts.
     #[serde(rename = "SECTION_START_DATE")]
     pub section_start_date: String,
+
+    /// How this particular entry is displayed. From my understanding, it looks like:
+    /// - `AC`: A section that can be enrolled or planned.
+    /// - `NC`: A section that cannot be enrolled or planned (see CSE 8A Discussions).
+    /// - `CA`: Canceled.
+    #[serde(rename = "FK_SST_SCTN_STATCD")]
+    pub display_type: String,
 }
 
 /// A meeting that you have enrolled in.. Note that this doesn't represent a class by itself, but
