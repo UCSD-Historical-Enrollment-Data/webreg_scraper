@@ -2,7 +2,7 @@
 An API wrapper for UCSD's [WebReg](https://act.ucsd.edu/webreg2/start) course enrollment system.
 
 ## Programming Language
-This repository consists of one major project and several small, helper projects.
+This repository consists of one major project and several small, helper projects (or just a set of scripts).
 
 ### API Wrapper
 The main project (API wrapper) uses the latest version of [Rust](https://www.rust-lang.org/). The reason why I chose Rust instead of, say, Python or C#, is because I wanted to learn more about Rust. Plus, I've been meaning to work on a project with Rust.
@@ -11,7 +11,7 @@ The main project (API wrapper) uses the latest version of [Rust](https://www.rus
 A majority of the code found in the `misc/data_processing` directory is written in Python, and is designed to clean and organize the data produced by the API wrapper's tracker.
 
 ### HttpAPI
-This repository hosts a very small project which uses Node's [HTTP](https://nodejs.org/api/http.html) library to create a local API which the wrapper can (later) use. In particular, this local API has one sole purpose: when new cookies are needed to log into WebReg, the wrapper can make a request to the local API. The local API will then use [a headless Chrome browser](https://github.com/puppeteer/puppeteer) to log into WebReg and get the new cookies. Note that you'll need to log into WebReg beforehand so you can select the `Remember me for 7 days` checkbox for the Duo 2FA (this will automatically be done when an initial request is made).
+This mini-project uses Node's [HTTP](https://nodejs.org/api/http.html) library to create a local API which the wrapper can (later) use. In particular, this local API has one sole purpose: when new cookies are needed to log into WebReg, the wrapper can make a request to the local API. The local API will then use [a headless Chrome browser](https://github.com/puppeteer/puppeteer) to log into WebReg and get the new cookies. Note that you'll need to log into WebReg beforehand so you can select the `Remember me for 7 days` checkbox for the Duo 2FA (this will automatically be done when an initial request is made).
 
 ## Wrapper Features (WIP & Completed)
 Below are some features that this wrapper has, along with what I plan on working on.

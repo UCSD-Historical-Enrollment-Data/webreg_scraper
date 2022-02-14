@@ -13,6 +13,8 @@ use crate::webreg::webreg_wrapper::{
 use std::error::Error;
 use std::time::{Duration, Instant};
 
+// When I feel like everything's good enough, I'll probably make this into
+// a better interface for general users.
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<(), Box<dyn Error>> {
     let cookie = get_cookies();
@@ -79,26 +81,24 @@ fn get_cookies() -> String {
 /// - `w`: The wrapper.
 #[allow(dead_code)]
 async fn basic_intro(w: &WebRegWrapper<'_>) {
-    // Get my schedule
-    let my_schedule = w.get_schedule(None).await.unwrap();
-    println!(
-        "Taking {} courses for a total of {} unit(s)",
-        my_schedule.len(),
-        my_schedule.iter().map(|x| x.units).sum::<f32>()
-    );
-
-    for d in my_schedule {
-        println!("{}", d.to_string());
+    const SUBJECT_CODE: &str = "MAE";
+    const COURSE_CODE: &str = "30B";
+    // Search stuff.
+    let enrollment_count_vec = w.get_enrollment_count(SUBJECT_CODE, COURSE_CODE).await.unwrap();
+    let ct_a = enrollment_count_vec.len();
+    for c in enrollment_count_vec {
+        println!("{}", c.to_string().trim());
     }
 
-    // Get my schedules.
-    println!("Schedules: {:?}", w.get_schedules().await.unwrap());
-
-    // Search stuff.
-    let enrollment_count_vec = w.get_enrollment_count("CSE", "198").await.unwrap();
-    for c in enrollment_count_vec {
+    println!("=============================");
+    let course_info_vec = w.get_course_info(SUBJECT_CODE, COURSE_CODE).await.unwrap();
+    let ct_b = course_info_vec.len();
+    for c in course_info_vec {
         println!("{}", c.to_string());
     }
+
+    println!("=============================");
+    println!("{} enrollment count vs. {} sections parsed.", ct_a, ct_b);
 }
 
 /// Gets possible schedules, optionally adding them to WebReg.

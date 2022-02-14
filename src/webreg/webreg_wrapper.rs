@@ -400,14 +400,30 @@ impl<'a> WebRegWrapper<'a> {
                 if text.is_empty() {
                     return None;
                 }
-                
+
+                let meetings =
+                    serde_json::from_str::<Vec<WebRegMeeting>>(&text).unwrap_or_default();
+                let mut meetings_to_parse = vec![];
+                let mut seen: HashSet<&str> = HashSet::new();
+                for meeting in &meetings {
+                    if !seen.insert(&*meeting.sect_code) {
+                        continue;
+                    }
+
+                    meetings_to_parse.push(meeting);
+                }
+
                 Some(
-                    serde_json::from_str::<Vec<WebRegMeeting>>(&text)
-                        .unwrap_or_default()
+                    meetings_to_parse
                         .into_iter()
                         .filter(|x| x.display_type == "AC")
                         .map(|x| CourseSection {
-                            subj_course_id: format!("{} {}", subject_code.trim(), course_code.trim()).to_uppercase(),
+                            subj_course_id: format!(
+                                "{} {}",
+                                subject_code.trim(),
+                                course_code.trim()
+                            )
+                            .to_uppercase(),
                             section_id: x.section_number.trim().to_string(),
                             section_code: x.sect_code.trim().to_string(),
                             instructor: x
