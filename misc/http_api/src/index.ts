@@ -36,8 +36,7 @@ function waitFor(ms: number): Promise<void> {
 async function getCookies(): Promise<string> {
     if (!BROWSER) {
         BROWSER = await puppeteer.launch({
-            args: ['--no-sandbox', '--disable-setuid-sandbox'],
-            headless: false
+            args: ['--no-sandbox', '--disable-setuid-sandbox']
         });
     }
 
