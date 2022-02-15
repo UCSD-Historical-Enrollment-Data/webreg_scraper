@@ -36,7 +36,8 @@ function waitFor(ms: number): Promise<void> {
 async function getCookies(): Promise<string> {
     if (!BROWSER) {
         BROWSER = await puppeteer.launch({
-            args: ['--no-sandbox', '--disable-setuid-sandbox']
+            args: ['--no-sandbox', '--disable-setuid-sandbox'],
+            headless: false
         });
     }
 
@@ -78,6 +79,7 @@ async function getCookies(): Promise<string> {
 
         // it's possible that we might need to cancel our existing authentication request,
         // especially if we have duo push automatically send upon logging in
+        await waitFor(1000);
         const cancelButton = await duoFrame.$(".btn-cancel");
         if (cancelButton) {
             await cancelButton.click();
@@ -91,8 +93,8 @@ async function getCookies(): Promise<string> {
         await duoFrame.click('#auth_methods > fieldset > div.row-label.push-label > button');
     }
 
-    console.info("Logged in successfully.");
     await page.waitForSelector('#startpage-button-go');
+    console.info("Logged in successfully.");
     // Get cookies ready to load.
     await page.click('#startpage-button-go');
     const cookies = await page.cookies("https://act.ucsd.edu/webreg2/svc/wradapter/secure/sched-get-schednames?termcode=SP22");

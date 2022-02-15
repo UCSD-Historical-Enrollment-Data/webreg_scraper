@@ -39,15 +39,7 @@ pub async fn track_webreg_enrollment(
     }
 
     let mut fail_count = 0;
-    loop {
-        if fail_count != 0 && fail_count > 20 {
-            eprintln!(
-                "[{}] Too many failures when trying to request data from WebReg. Quitting.",
-                get_pretty_time()
-            );
-            break;
-        }
-
+    'main: loop {
         writer.flush().unwrap();
         let results = wrapper.search_courses(search_res).await.unwrap_or_default();
 
@@ -63,6 +55,14 @@ pub async fn track_webreg_enrollment(
         );
 
         for r in results {
+            if fail_count != 0 && fail_count > 20 {
+                eprintln!(
+                    "[{}] Too many failures when trying to request data from WebReg. Exiting.",
+                    get_pretty_time()
+                );
+                break 'main;
+            }
+
             let res = wrapper
                 .get_enrollment_count(r.subj_code.trim(), r.course_code.trim())
                 .await;
@@ -103,12 +103,13 @@ pub async fn track_webreg_enrollment(
                     });
                 }
                 _ => {
-                    fail_count = 0;
+                    fail_count += 1;
                     eprintln!(
-                        "[{}] Course {} {} not found on WebReg.",
+                        "[{}] Course {} {} not found on WebReg. Were you logged out? (FAIL_COUNT: {}).",
                         get_pretty_time(),
                         r.subj_code,
-                        r.course_code
+                        r.course_code,
+                        fail_count
                     );
                 }
             }

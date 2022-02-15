@@ -1,6 +1,5 @@
 use crate::{
     schedule::scheduler::Schedule,
-    util::get_pretty_time,
     webreg::webreg_wrapper::{SearchRequestBuilder, WebRegWrapper},
 };
 use std::{
@@ -76,14 +75,6 @@ pub async fn export_all_sections(w: &WebRegWrapper<'_>) {
     let results = w.search_courses(&s).await.unwrap_or_default();
 
     for res in results {
-        println!(
-            "[{}] Processing: {} ({} {})",
-            get_pretty_time(),
-            res.course_title.trim(),
-            res.subj_code.trim(),
-            res.course_code.trim()
-        );
-
         w.get_course_info(res.subj_code.trim(), res.course_code.trim())
             .await
             .unwrap_or_default()

@@ -37,7 +37,7 @@ const ALL_SCHEDULE: &str = "https://act.ucsd.edu/webreg2/svc/wradapter/secure/sc
 
 /// A wrapper for [UCSD's WebReg](https://act.ucsd.edu/webreg2/start).
 pub struct WebRegWrapper<'a> {
-    cookies: &'a str,
+    cookies: String,
     client: Client,
     term: &'a str,
 }
@@ -47,10 +47,11 @@ impl<'a> WebRegWrapper<'a> {
     ///
     /// # Parameters
     /// - `cookies`: The cookies from your session of WebReg.
+    /// - `term`: The term.
     ///
     /// # Returns
     /// The new instance.
-    pub fn new(cookies: &'a str, term: &'a str) -> Self {
+    pub fn new(cookies: String, term: &'a str) -> Self {
         WebRegWrapper {
             cookies,
             client: Client::new(),
@@ -66,7 +67,7 @@ impl<'a> WebRegWrapper<'a> {
         let res = self
             .client
             .get(WEBREG_BASE)
-            .header(COOKIE, self.cookies)
+            .header(COOKIE, &self.cookies)
             .header(USER_AGENT, MY_USER_AGENT)
             .send()
             .await;
@@ -85,7 +86,7 @@ impl<'a> WebRegWrapper<'a> {
         let res = self
             .client
             .get(ACC_NAME)
-            .header(COOKIE, self.cookies)
+            .header(COOKIE, &self.cookies)
             .header(USER_AGENT, MY_USER_AGENT)
             .send()
             .await;
@@ -126,7 +127,7 @@ impl<'a> WebRegWrapper<'a> {
         let res = self
             .client
             .get(url)
-            .header(COOKIE, self.cookies)
+            .header(COOKIE, &self.cookies)
             .header(USER_AGENT, MY_USER_AGENT)
             .send()
             .await;
@@ -377,7 +378,7 @@ impl<'a> WebRegWrapper<'a> {
         let res = self
             .client
             .get(url)
-            .header(COOKIE, self.cookies)
+            .header(COOKIE, &self.cookies)
             .header(USER_AGENT, MY_USER_AGENT)
             .send()
             .await;
@@ -473,7 +474,7 @@ impl<'a> WebRegWrapper<'a> {
         let res = self
             .client
             .get(url)
-            .header(COOKIE, self.cookies)
+            .header(COOKIE, &self.cookies)
             .header(USER_AGENT, MY_USER_AGENT)
             .send()
             .await;
@@ -888,7 +889,7 @@ impl<'a> WebRegWrapper<'a> {
         let res = self
             .client
             .get(url)
-            .header(COOKIE, self.cookies)
+            .header(COOKIE, &self.cookies)
             .header(USER_AGENT, MY_USER_AGENT)
             .send()
             .await;
@@ -928,7 +929,7 @@ impl<'a> WebRegWrapper<'a> {
             .client
             .post(SEND_EMAIL)
             .form(&params)
-            .header(COOKIE, self.cookies)
+            .header(COOKIE, &self.cookies)
             .header(USER_AGENT, MY_USER_AGENT)
             .send()
             .await;
@@ -993,7 +994,7 @@ impl<'a> WebRegWrapper<'a> {
             self.client
                 .post(CHANGE_ENROLL)
                 .form(&params)
-                .header(COOKIE, self.cookies)
+                .header(COOKIE, &self.cookies)
                 .header(USER_AGENT, MY_USER_AGENT)
                 .send()
                 .await,
@@ -1034,7 +1035,7 @@ impl<'a> WebRegWrapper<'a> {
                 self.client
                     .post(PLAN_EDIT)
                     .form(&params_edit)
-                    .header(COOKIE, self.cookies)
+                    .header(COOKIE, &self.cookies)
                     .header(USER_AGENT, MY_USER_AGENT)
                     .send()
                     .await,
@@ -1069,7 +1070,7 @@ impl<'a> WebRegWrapper<'a> {
             self.client
                 .post(PLAN_ADD)
                 .form(&params_add)
-                .header(COOKIE, self.cookies)
+                .header(COOKIE, &self.cookies)
                 .header(USER_AGENT, MY_USER_AGENT)
                 .send()
                 .await,
@@ -1100,7 +1101,7 @@ impl<'a> WebRegWrapper<'a> {
             self.client
                 .post(PLAN_REMOVE)
                 .form(&params)
-                .header(COOKIE, self.cookies)
+                .header(COOKIE, &self.cookies)
                 .header(USER_AGENT, MY_USER_AGENT)
                 .send()
                 .await,
@@ -1118,7 +1119,7 @@ impl<'a> WebRegWrapper<'a> {
         let res = self
             .client
             .get(format!("{}?_={}", PING_SERVER, get_epoch_time()))
-            .header(COOKIE, self.cookies)
+            .header(COOKIE, &self.cookies)
             .header(USER_AGENT, MY_USER_AGENT)
             .send()
             .await;
@@ -1165,7 +1166,7 @@ impl<'a> WebRegWrapper<'a> {
             self.client
                 .post(RENAME_SCHEDULE)
                 .form(&params)
-                .header(COOKIE, self.cookies)
+                .header(COOKIE, &self.cookies)
                 .header(USER_AGENT, MY_USER_AGENT)
                 .send()
                 .await,
@@ -1193,7 +1194,7 @@ impl<'a> WebRegWrapper<'a> {
             self.client
                 .post(REMOVE_SCHEDULE)
                 .form(&params)
-                .header(COOKIE, self.cookies)
+                .header(COOKIE, &self.cookies)
                 .header(USER_AGENT, MY_USER_AGENT)
                 .send()
                 .await,
@@ -1212,7 +1213,7 @@ impl<'a> WebRegWrapper<'a> {
         let res = self
             .client
             .get(url)
-            .header(COOKIE, self.cookies)
+            .header(COOKIE, &self.cookies)
             .header(USER_AGENT, MY_USER_AGENT)
             .send()
             .await;

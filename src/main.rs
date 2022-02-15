@@ -5,13 +5,24 @@ mod tracker;
 mod util;
 mod webreg;
 
+use reqwest::Client;
+use serde_json::Value;
+
 use crate::export::exporter::save_schedules;
 use crate::schedule::scheduler::{self, ScheduleConstraint};
+use crate::util::get_pretty_time;
 use crate::webreg::webreg_wrapper::{
     CourseLevelFilter, PlanAdd, SearchRequestBuilder, WebRegWrapper,
 };
 use std::error::Error;
 use std::time::{Duration, Instant};
+
+const TERM: &str = "SP22";
+
+#[cfg(debug_assertions)]
+const TIMEOUT: u64 = 5;
+#[cfg(not(debug_assertions))]
+const TIMEOUT: u64 = 15 * 60;
 
 // When I feel like everything's good enough, I'll probably make this into
 // a better interface for general users.
@@ -24,8 +35,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         return Ok(());
     }
 
-    let w = WebRegWrapper::new(cookie, "SP22");
-
+    let w = WebRegWrapper::new(cookie.to_string(), TERM);
     let valid = w.is_valid().await;
 
     if !valid {
@@ -38,20 +48,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
         w.get_account_name().await
     );
 
-    if cfg!(debug_assertions) {
+    if !cfg!(debug_assertions) {
         basic_intro(&w).await;
     } else {
-        tracker::track::track_webreg_enrollment(
-            &w,
-            &SearchRequestBuilder::new()
-                .add_subject("CSE")
-                .add_subject("COGS")
-                .add_subject("MATH")
-                .add_subject("ECE")
-                .filter_courses_by(CourseLevelFilter::LowerDivision)
-                .filter_courses_by(CourseLevelFilter::UpperDivision),
-        )
-        .await;
+        run_tracker(w, Some("http://localhost:3000/cookie")).await;
     }
 
     Ok(())
@@ -73,6 +73,69 @@ fn get_cookies() -> String {
     }
 
     fs::read_to_string(file).unwrap_or_else(|_| "".to_string())
+}
+
+/// Runs the WebReg tracker. This will optionally attempt to reconnect to
+/// WebReg when signed out.
+///
+/// # Parameters
+/// - `w`: The wrapper.
+/// - `cookie_url`: The URL to the API where new cookies can be requested. If none
+/// is specified, then this will automatically terminate upon any issue with the
+/// tracker.
+async fn run_tracker(w: WebRegWrapper<'_>, cookie_url: Option<&str>) {
+    let client = Client::new();
+
+    let mut webreg_wrapper = w;
+    loop {
+        tracker::track::track_webreg_enrollment(
+            &webreg_wrapper,
+            &SearchRequestBuilder::new()
+                .add_subject("CSE")
+                .add_subject("COGS")
+                .add_subject("MATH")
+                .add_subject("ECE")
+                .filter_courses_by(CourseLevelFilter::LowerDivision)
+                .filter_courses_by(CourseLevelFilter::UpperDivision),
+        )
+        .await;
+
+        // If we're here, this means something went wrong.
+        if cookie_url.is_none() {
+            break;
+        }
+
+        println!("[{}] Taking a 15 minute break.", get_pretty_time());
+        tokio::time::sleep(Duration::from_secs(TIMEOUT)).await;
+
+        // Get new cookies.
+        let new_cookie_str = {
+            match client.get(cookie_url.unwrap()).send().await {
+                Ok(t) => {
+                    let txt = t.text().await.unwrap_or_default();
+                    let json: Value = serde_json::from_str(&txt).unwrap_or_default();
+                    if json["cookie"].is_string() {
+                        Some(json["cookie"].as_str().unwrap().to_string())
+                    } else {
+                        None
+                    }
+                }
+                Err(_) => None,
+            }
+        };
+
+        // And then try to make a new wrapper with said cookies.
+        if let Some(c) = new_cookie_str {
+            if c.is_empty() {
+                break;
+            }
+
+            webreg_wrapper = WebRegWrapper::new(c, TERM);
+            continue;
+        }
+
+        break;
+    }
 }
 
 /// Performs a basic test of the `WebRegWrapper`.
