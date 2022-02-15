@@ -48,7 +48,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         w.get_account_name().await
     );
 
-    if !cfg!(debug_assertions) {
+    if cfg!(debug_assertions) {
         basic_intro(&w).await;
     } else {
         run_tracker(w, Some("http://localhost:3000/cookie")).await;
