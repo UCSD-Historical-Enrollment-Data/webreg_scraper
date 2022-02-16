@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 use crate::util::get_epoch_time;
 use crate::webreg::webreg_clean_defn::{
     CourseSection, EnrollmentStatus, Meeting, MeetingDay, ScheduledSection,
@@ -27,13 +25,21 @@ const COURSE_DATA: &str =
 const CURR_SCHEDULE: &str = "https://act.ucsd.edu/webreg2/svc/wradapter/secure/get-class?";
 const SEND_EMAIL: &str = "https://act.ucsd.edu/webreg2/svc/wradapter/secure/send-email";
 const CHANGE_ENROLL: &str = "https://act.ucsd.edu/webreg2/svc/wradapter/secure/change-enroll";
-const PLAN_ADD: &str = "https://act.ucsd.edu/webreg2/svc/wradapter/secure/plan-add";
-const PLAN_REMOVE: &str = "https://act.ucsd.edu/webreg2/svc/wradapter/secure/plan-remove";
-const PLAN_EDIT: &str = "https://act.ucsd.edu/webreg2/svc/wradapter/secure/edit-plan";
-const PING_SERVER: &str = "https://act.ucsd.edu/webreg2/svc/wradapter/secure/ping-server";
+
 const REMOVE_SCHEDULE: &str = "https://act.ucsd.edu/webreg2/svc/wradapter/secure/sched-remove";
 const RENAME_SCHEDULE: &str = "https://act.ucsd.edu/webreg2/svc/wradapter/secure/plan-rename";
 const ALL_SCHEDULE: &str = "https://act.ucsd.edu/webreg2/svc/wradapter/secure/sched-get-schednames";
+
+const PING_SERVER: &str = "https://act.ucsd.edu/webreg2/svc/wradapter/secure/ping-server";
+
+const PLAN_ADD: &str = "https://act.ucsd.edu/webreg2/svc/wradapter/secure/plan-add";
+const PLAN_REMOVE: &str = "https://act.ucsd.edu/webreg2/svc/wradapter/secure/plan-remove";
+const PLAN_EDIT: &str = "https://act.ucsd.edu/webreg2/svc/wradapter/secure/edit-plan";
+const PLAN_REMOVE_ALL: &str = "https://act.ucsd.edu/webreg2/svc/wradapter/secure/plan-remove-all";
+
+const ENROLL_ADD: &str = "https://act.ucsd.edu/webreg2/svc/wradapter/secure/add-enroll";
+const ENROLL_EDIT: &str = "https://act.ucsd.edu/webreg2/svc/wradapter/secure/edit-enroll";
+const DROP_ENROLL: &str = "https://act.ucsd.edu/webreg2/svc/wradapter/secure/drop-enroll";
 
 /// A wrapper for [UCSD's WebReg](https://act.ucsd.edu/webreg2/start).
 pub struct WebRegWrapper<'a> {
@@ -978,22 +984,20 @@ impl<'a> WebRegWrapper<'a> {
         let sec_id = poss_class.section_number.to_string();
         let units = poss_class.units.to_string();
 
-        let params: HashMap<&str, &str> = HashMap::from([
-            ("section", &*sec_id),
-            ("subjCode", ""),
-            ("crseCode", ""),
-            ("unit", &*units),
-            ("grade", new_grade_opt),
-            // You don't actually need these
-            ("oldGrade", ""),
-            ("oldUnit", ""),
-            ("termcode", self.term),
-        ]);
-
         self._process_response(
             self.client
                 .post(CHANGE_ENROLL)
-                .form(&params)
+                .form(&HashMap::from([
+                    ("section", &*sec_id),
+                    ("subjCode", ""),
+                    ("crseCode", ""),
+                    ("unit", &*units),
+                    ("grade", new_grade_opt),
+                    // You don't actually need these
+                    ("oldGrade", ""),
+                    ("oldUnit", ""),
+                    ("termcode", self.term),
+                ]))
                 .header(COOKIE, &self.cookies)
                 .header(USER_AGENT, MY_USER_AGENT)
                 .send()
@@ -1022,19 +1026,17 @@ impl<'a> WebRegWrapper<'a> {
         if validate {
             // We need to call the edit endpoint first, or else we'll have issues where we don't
             // actually enroll in every component of the course.
-            let params_edit: HashMap<&str, &str> = HashMap::from([
-                ("section", &*plan_options.section_number),
-                ("subjcode", &*plan_options.subject_code),
-                ("crsecode", &*crsc_code),
-                ("termcode", self.term),
-            ]);
-
-            // This can potentially return "false" due to you not being able to enroll in the
+            // Also, this can potentially return "false" due to you not being able to enroll in the
             // class, e.g. the class you're trying to plan is a major-restricted class.
             self._process_response(
                 self.client
                     .post(PLAN_EDIT)
-                    .form(&params_edit)
+                    .form(&HashMap::from([
+                        ("section", &*plan_options.section_number),
+                        ("subjcode", &*plan_options.subject_code),
+                        ("crsecode", &*crsc_code),
+                        ("termcode", self.term),
+                    ]))
                     .header(COOKIE, &self.cookies)
                     .header(USER_AGENT, MY_USER_AGENT)
                     .send()
@@ -1043,33 +1045,31 @@ impl<'a> WebRegWrapper<'a> {
             .await;
         }
 
-        let params_add: HashMap<&str, &str> = HashMap::from([
-            ("subjcode", &*plan_options.subject_code),
-            ("crsecode", &*crsc_code),
-            ("sectnum", &*plan_options.section_number),
-            ("sectcode", &*plan_options.section_code),
-            ("unit", &*u),
-            (
-                "grade",
-                match plan_options.grading_option {
-                    Some(r) if r == "L" || r == "P" || r == "S" => r,
-                    _ => "L",
-                },
-            ),
-            ("termcode", self.term),
-            (
-                "schedname",
-                match plan_options.schedule_name {
-                    Some(r) => r,
-                    None => DEFAULT_SCHEDULE_NAME,
-                },
-            ),
-        ]);
-
         self._process_response(
             self.client
                 .post(PLAN_ADD)
-                .form(&params_add)
+                .form(&HashMap::from([
+                    ("subjcode", &*plan_options.subject_code),
+                    ("crsecode", &*crsc_code),
+                    ("sectnum", &*plan_options.section_number),
+                    ("sectcode", &*plan_options.section_code),
+                    ("unit", &*u),
+                    (
+                        "grade",
+                        match plan_options.grading_option {
+                            Some(r) if r == "L" || r == "P" || r == "S" => r,
+                            _ => "L",
+                        },
+                    ),
+                    ("termcode", self.term),
+                    (
+                        "schedname",
+                        match plan_options.schedule_name {
+                            Some(r) => r,
+                            None => DEFAULT_SCHEDULE_NAME,
+                        },
+                    ),
+                ]))
                 .header(COOKIE, &self.cookies)
                 .header(USER_AGENT, MY_USER_AGENT)
                 .send()
@@ -1091,16 +1091,127 @@ impl<'a> WebRegWrapper<'a> {
         section_num: &str,
         schedule_name: Option<&'a str>,
     ) -> bool {
-        let params: HashMap<&str, &str> = HashMap::from([
-            ("sectnum", section_num),
-            ("termcode", self.term),
-            ("schedname", schedule_name.unwrap_or(DEFAULT_SCHEDULE_NAME)),
-        ]);
-
         self._process_response(
             self.client
                 .post(PLAN_REMOVE)
-                .form(&params)
+                .form(&HashMap::from([
+                    ("sectnum", section_num),
+                    ("termcode", self.term),
+                    ("schedname", schedule_name.unwrap_or(DEFAULT_SCHEDULE_NAME)),
+                ]))
+                .header(COOKIE, &self.cookies)
+                .header(USER_AGENT, MY_USER_AGENT)
+                .send()
+                .await,
+        )
+        .await
+    }
+
+    /// Enrolls in a class.
+    ///
+    /// # Parameters
+    /// - `enroll_options`: Information for the course that you want to enroll in.
+    /// - `validate`: Whether to validate your enrollment of this course beforehand. Note that
+    /// validation isn't necessary, although it is recommended. But, perhaps you just one to make
+    /// one less request.
+    ///
+    /// # Returns
+    /// `true` if you were enrolled in the class successfully and `false` otherwise.
+    pub async fn enroll_in_section(&self, enroll_options: EnrollAdd<'_>, validate: bool) -> bool {
+        let u = enroll_options.unit_count.to_string();
+        let crsc_code = self._get_formatted_course_code(enroll_options.course_code);
+
+        if validate {
+            let r = self
+                ._process_response(
+                    self.client
+                        .post(ENROLL_EDIT)
+                        .form(&HashMap::from([
+                            ("section", &*enroll_options.section_number),
+                            ("subjcode", &*enroll_options.subject_code),
+                            ("crsecode", &*crsc_code),
+                            ("termcode", self.term),
+                        ]))
+                        .header(COOKIE, &self.cookies)
+                        .header(USER_AGENT, MY_USER_AGENT)
+                        .send()
+                        .await,
+                )
+                .await;
+
+            if !r {
+                return false;
+            }
+        }
+
+        let result = self
+            ._process_response(
+                self.client
+                    .post(ENROLL_ADD)
+                    .form(&HashMap::from([
+                        ("subjcode", &*enroll_options.subject_code),
+                        ("crsecode", &*crsc_code),
+                        ("section", &*enroll_options.section_number),
+                        ("unit", &*u),
+                        (
+                            "grade",
+                            match enroll_options.grading_option {
+                                Some(r) if r == "L" || r == "P" || r == "S" => r,
+                                _ => "L",
+                            },
+                        ),
+                        ("termcode", self.term),
+                    ]))
+                    .header(COOKIE, &self.cookies)
+                    .header(USER_AGENT, MY_USER_AGENT)
+                    .send()
+                    .await,
+            )
+            .await;
+
+        if !result {
+            return false;
+        }
+
+        // This will always return true
+        self._process_response(
+            self.client
+                .post(PLAN_REMOVE_ALL)
+                .form(&HashMap::from([
+                    ("sectnum", &*enroll_options.section_number),
+                    ("termcode", self.term),
+                ]))
+                .header(COOKIE, &self.cookies)
+                .header(USER_AGENT, MY_USER_AGENT)
+                .send()
+                .await,
+        )
+        .await
+    }
+
+    /// Drops a section.
+    ///
+    /// # Parameters
+    /// - `drop_options`: Information for the course that you want to drop.
+    ///
+    /// # Returns
+    /// `true` if you were dropped from the class successfully and `false` otherwise.
+    /// 
+    /// # Remarks
+    /// It is a good idea to make a call to get your current schedule before you
+    /// make a request here. That way, you know which classes can be dropped. 
+    pub async fn drop_section(&self, drop_options: DropSection<'_>) -> bool {
+        let crsc_code = self._get_formatted_course_code(drop_options.course_code);
+
+        self._process_response(
+            self.client
+                .post(DROP_ENROLL)
+                .form(&HashMap::from([
+                    ("subjcode", &*drop_options.subject_code),
+                    ("crsecode", &*crsc_code),
+                    ("section", &*drop_options.section_number),
+                    ("termcode", self.term),
+                ]))
                 .header(COOKIE, &self.cookies)
                 .header(USER_AGENT, MY_USER_AGENT)
                 .send()
@@ -1156,16 +1267,14 @@ impl<'a> WebRegWrapper<'a> {
             return false;
         }
 
-        let params: HashMap<&str, &str> = HashMap::from([
-            ("termcode", self.term),
-            ("oldschedname", old_name),
-            ("newschedname", new_name),
-        ]);
-
         self._process_response(
             self.client
                 .post(RENAME_SCHEDULE)
-                .form(&params)
+                .form(&HashMap::from([
+                    ("termcode", self.term),
+                    ("oldschedname", old_name),
+                    ("newschedname", new_name),
+                ]))
                 .header(COOKIE, &self.cookies)
                 .header(USER_AGENT, MY_USER_AGENT)
                 .send()
@@ -1187,13 +1296,13 @@ impl<'a> WebRegWrapper<'a> {
             return false;
         }
 
-        let params: HashMap<&str, &str> =
-            HashMap::from([("termcode", self.term), ("schedname", schedule_name)]);
-
         self._process_response(
             self.client
                 .post(REMOVE_SCHEDULE)
-                .form(&params)
+                .form(&HashMap::from([
+                    ("termcode", self.term),
+                    ("schedname", schedule_name),
+                ]))
                 .header(COOKIE, &self.cookies)
                 .header(USER_AGENT, MY_USER_AGENT)
                 .send()
@@ -1207,7 +1316,7 @@ impl<'a> WebRegWrapper<'a> {
     /// # Returns
     /// A vector of strings representing the names of the schedules, or `None` if
     /// something went wrong.
-    pub async fn get_schedules(&self) -> Option<Vec<String>> {
+    pub async fn get_schedule_list(&self) -> Option<Vec<String>> {
         let url = Url::parse_with_params(ALL_SCHEDULE, &[("termcode", self.term)]).unwrap();
 
         let res = self
@@ -1294,6 +1403,30 @@ struct GroupedSection<'a, T> {
     main_meeting: Vec<&'a T>,
     child_meetings: Vec<&'a T>,
     other_special_meetings: Vec<&'a T>,
+}
+
+pub struct EnrollAdd<'a> {
+    /// The subject code. For example, `CSE`.
+    pub subject_code: &'a str,
+    /// The course code. For example, `12`.
+    pub course_code: &'a str,
+    /// The section number. For example, `0123123`.
+    pub section_number: &'a str,
+    /// The grading option. Can either be L, P, or S.
+    pub grading_option: Option<&'a str>,
+    /// The schedule name.
+    pub schedule_name: Option<&'a str>,
+    /// The number of units.
+    pub unit_count: u8,
+}
+
+pub struct DropSection<'a> {
+    /// The subject code. For example, `CSE`.
+    pub subject_code: &'a str,
+    /// The course code. For example, `12`.
+    pub course_code: &'a str,
+    /// The section number. For example, `0123123`.
+    pub section_number: &'a str,
 }
 
 pub struct PlanAdd<'a> {
