@@ -22,16 +22,14 @@ Below are some features that this wrapper has, along with what I plan on working
 - [x] Get detailed information about a specific class (like number of students enrolled, section times, etc.)
 - [x] Getting your current schedule.
 - [x] Ability to get detailed information for a wide range of classes.
-- [ ] Prerequisite information.
 
 ### ii. General POST Requests
 - [x] Changing grading option.
-- [ ] Enrolling in, or dropping, a class.
+- [x] Enrolling in, or dropping, a class.
 - [x] Planning, or un-planning, a class.
 - [ ] Waitlisting a class.
 
 ### iii. Miscellaneous (Low-Priority)
-- [ ] Get appointment time.
 - [x] Creating, or removing/renaming, a schedule.
 - [ ] Adding, or removing, an event from a schedule.
 - [x] Sending a confirmation email to yourself.

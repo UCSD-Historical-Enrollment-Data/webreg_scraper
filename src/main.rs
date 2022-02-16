@@ -149,11 +149,11 @@ async fn basic_intro(w: &WebRegWrapper<'_>) {
     }
 
     println!(
-        "Attempting to enroll in CSE 95 => {}",
+        "Attempting to enroll in MATH 95 => {}",
         w.enroll_in_section(
             EnrollAdd {
                 section_number: "078483",
-                grading_option: Some("L"),
+                grading_option: None,
                 unit_count: None,
             },
             true
@@ -166,7 +166,7 @@ async fn basic_intro(w: &WebRegWrapper<'_>) {
     }
 
     println!(
-        "Attempting to drop CSE 95 => {}",
+        "Attempting to drop MATH 95 => {}",
         w.drop_section("078483").await
     );
     for c in w.get_schedule(None).await.unwrap() {

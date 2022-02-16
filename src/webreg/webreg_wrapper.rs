@@ -1112,8 +1112,8 @@ impl<'a> WebRegWrapper<'a> {
     /// # Parameters
     /// - `enroll_options`: Information for the course that you want to enroll in.
     /// - `validate`: Whether to validate your enrollment of this course beforehand. Note that
-    /// validation isn't necessary, although it is recommended. But, perhaps you just one to make
-    /// one less request.
+    /// validation isn't necessary, although it is recommended. But, perhaps you just want to
+    /// make one less request.
     ///
     /// # Returns
     /// `true` if you were enrolled in the class successfully and `false` otherwise.
@@ -1153,17 +1153,18 @@ impl<'a> WebRegWrapper<'a> {
                 self.client
                     .post(ENROLL_ADD)
                     .form(&HashMap::from([
+                        // These are required
                         ("section", &*enroll_options.section_number),
+                        ("termcode", self.term),
+                        // These are optional.
                         ("unit", &*u),
                         (
                             "grade",
                             match enroll_options.grading_option {
                                 Some(r) if r == "L" || r == "P" || r == "S" => r,
-                                _ => "L",
+                                _ => "",
                             },
                         ),
-                        ("termcode", self.term),
-                        // These are optional.
                         ("crsecode", ""),
                         ("subjcode", ""),
                     ]))
