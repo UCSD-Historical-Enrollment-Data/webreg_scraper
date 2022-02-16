@@ -1118,8 +1118,10 @@ impl<'a> WebRegWrapper<'a> {
     /// # Returns
     /// `true` if you were enrolled in the class successfully and `false` otherwise.
     pub async fn enroll_in_section(&self, enroll_options: EnrollAdd<'_>, validate: bool) -> bool {
-        let u = enroll_options.unit_count.to_string();
-        let crsc_code = self._get_formatted_course_code(enroll_options.course_code);
+        let u = match enroll_options.unit_count {
+            Some(r) => r.to_string(),
+            None => "".to_string(),
+        };
 
         if validate {
             let r = self
@@ -1127,10 +1129,12 @@ impl<'a> WebRegWrapper<'a> {
                     self.client
                         .post(ENROLL_EDIT)
                         .form(&HashMap::from([
+                            // These are required
                             ("section", &*enroll_options.section_number),
-                            ("subjcode", &*enroll_options.subject_code),
-                            ("crsecode", &*crsc_code),
                             ("termcode", self.term),
+                            // These are optional.
+                            ("subjcode", ""),
+                            ("crsecode", ""),
                         ]))
                         .header(COOKIE, &self.cookies)
                         .header(USER_AGENT, MY_USER_AGENT)
@@ -1149,8 +1153,6 @@ impl<'a> WebRegWrapper<'a> {
                 self.client
                     .post(ENROLL_ADD)
                     .form(&HashMap::from([
-                        ("subjcode", &*enroll_options.subject_code),
-                        ("crsecode", &*crsc_code),
                         ("section", &*enroll_options.section_number),
                         ("unit", &*u),
                         (
@@ -1161,6 +1163,9 @@ impl<'a> WebRegWrapper<'a> {
                             },
                         ),
                         ("termcode", self.term),
+                        // These are optional.
+                        ("crsecode", ""),
+                        ("subjcode", ""),
                     ]))
                     .header(COOKIE, &self.cookies)
                     .header(USER_AGENT, MY_USER_AGENT)
@@ -1192,24 +1197,25 @@ impl<'a> WebRegWrapper<'a> {
     /// Drops a section.
     ///
     /// # Parameters
-    /// - `drop_options`: Information for the course that you want to drop.
+    /// - `section_num`: The section number corresponding to the section that you want
+    /// to drop.
     ///
     /// # Returns
     /// `true` if you were dropped from the class successfully and `false` otherwise.
-    /// 
+    ///
     /// # Remarks
     /// It is a good idea to make a call to get your current schedule before you
-    /// make a request here. That way, you know which classes can be dropped. 
-    pub async fn drop_section(&self, drop_options: DropSection<'_>) -> bool {
-        let crsc_code = self._get_formatted_course_code(drop_options.course_code);
-
+    /// make a request here. That way, you know which classes can be dropped.
+    pub async fn drop_section(&self, section_num: &'a str) -> bool {
         self._process_response(
             self.client
                 .post(DROP_ENROLL)
                 .form(&HashMap::from([
-                    ("subjcode", &*drop_options.subject_code),
-                    ("crsecode", &*crsc_code),
-                    ("section", &*drop_options.section_number),
+                    // These parameters are optional
+                    ("subjcode", ""),
+                    ("crsecode", ""),
+                    // But these are required
+                    ("section", section_num),
                     ("termcode", self.term),
                 ]))
                 .header(COOKIE, &self.cookies)
@@ -1406,27 +1412,14 @@ struct GroupedSection<'a, T> {
 }
 
 pub struct EnrollAdd<'a> {
-    /// The subject code. For example, `CSE`.
-    pub subject_code: &'a str,
-    /// The course code. For example, `12`.
-    pub course_code: &'a str,
     /// The section number. For example, `0123123`.
     pub section_number: &'a str,
     /// The grading option. Can either be L, P, or S.
+    /// If None is specified, this uses the default option.
     pub grading_option: Option<&'a str>,
-    /// The schedule name.
-    pub schedule_name: Option<&'a str>,
-    /// The number of units.
-    pub unit_count: u8,
-}
-
-pub struct DropSection<'a> {
-    /// The subject code. For example, `CSE`.
-    pub subject_code: &'a str,
-    /// The course code. For example, `12`.
-    pub course_code: &'a str,
-    /// The section number. For example, `0123123`.
-    pub section_number: &'a str,
+    /// The number of units. If none is specified, this
+    /// uses the default unit count.
+    pub unit_count: Option<u8>,
 }
 
 pub struct PlanAdd<'a> {

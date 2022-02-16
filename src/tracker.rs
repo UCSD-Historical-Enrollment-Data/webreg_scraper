@@ -4,7 +4,6 @@ use std::fs::OpenOptions;
 use std::io::{BufWriter, Write};
 use std::path::Path;
 use std::time::Duration;
-use tokio;
 
 /// Tracks WebReg for enrollment information. This will continuously check specific courses for
 /// their enrollment information (number of students waitlisted/enrolled, total seats) along with

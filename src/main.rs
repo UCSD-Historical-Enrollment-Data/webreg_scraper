@@ -12,7 +12,7 @@ use crate::export::exporter::save_schedules;
 use crate::schedule::scheduler::{self, ScheduleConstraint};
 use crate::util::get_pretty_time;
 use crate::webreg::webreg_wrapper::{
-    CourseLevelFilter, PlanAdd, SearchRequestBuilder, WebRegWrapper,
+    CourseLevelFilter, EnrollAdd, PlanAdd, SearchRequestBuilder, WebRegWrapper,
 };
 use std::error::Error;
 use std::time::{Duration, Instant};
@@ -88,7 +88,7 @@ async fn run_tracker(w: WebRegWrapper<'_>, cookie_url: Option<&str>) {
 
     let mut webreg_wrapper = w;
     loop {
-        tracker::track::track_webreg_enrollment(
+        tracker::track_webreg_enrollment(
             &webreg_wrapper,
             &SearchRequestBuilder::new()
                 .add_subject("CSE")
@@ -138,12 +138,48 @@ async fn run_tracker(w: WebRegWrapper<'_>, cookie_url: Option<&str>) {
     }
 }
 
-/// Performs a basic test of the `WebRegWrapper`.
+/// Used to run some random stuff.
 ///
 /// # Parameters
 /// - `w`: The wrapper.
 #[allow(dead_code)]
 async fn basic_intro(w: &WebRegWrapper<'_>) {
+    for c in w.get_schedule(None).await.unwrap() {
+        println!("{}", c.to_string());
+    }
+
+    println!(
+        "Attempting to enroll in CSE 95 => {}",
+        w.enroll_in_section(
+            EnrollAdd {
+                section_number: "078483",
+                grading_option: Some("L"),
+                unit_count: None,
+            },
+            true
+        )
+        .await
+    );
+
+    for c in w.get_schedule(None).await.unwrap() {
+        println!("{}", c.to_string());
+    }
+
+    println!(
+        "Attempting to drop CSE 95 => {}",
+        w.drop_section("078483").await
+    );
+    for c in w.get_schedule(None).await.unwrap() {
+        println!("{}", c.to_string());
+    }
+}
+
+/// Performs a basic test of the `WebRegWrapper`.
+///
+/// # Parameters
+/// - `w`: The wrapper.
+#[allow(dead_code)]
+async fn basic_tests(w: &WebRegWrapper<'_>) {
     const SUBJECT_CODE: &str = "MAE";
     const COURSE_CODE: &str = "30B";
     // Search stuff.
