@@ -10,6 +10,7 @@ import * as path from "path";
 import * as puppeteer from "puppeteer";
 import * as http from "http";
 
+// Constants & other important variables
 let BROWSER: puppeteer.Browser | null = null;
 const CONFIG: IConfiguration = JSON.parse(
     fs.readFileSync(path.join(__dirname, "..", "credentials.json")
@@ -21,6 +22,27 @@ interface IConfiguration {
     password: string;
 }
 
+/**
+ * Logs a message.
+ * @param msg The message to log.
+ */
+function log(msg: string): void {
+    const time = new Intl.DateTimeFormat([], {
+        timeZone: "America/Los_Angeles",
+        year: "numeric",
+        month: "numeric",
+        day: "numeric",
+        hour: "numeric",
+        minute: "numeric",
+        second: "numeric",
+    }).format(new Date());
+    console.info(`[${time}] ${msg}`);
+}
+
+/**
+ * Waits a certain number of milliseconds before continuing execution.
+ * @param ms The number of milliseconds to wait.
+ */
 function waitFor(ms: number): Promise<void> {
     return new Promise(async r => {
         setTimeout(() => {
@@ -34,7 +56,9 @@ function waitFor(ms: number): Promise<void> {
  * @returns The cookies.
  */
 async function getCookies(): Promise<string> {
+    log("GetCookies function called.")
     if (!BROWSER) {
+        log("Launching browser for first-time setup.");
         BROWSER = await puppeteer.launch({
             args: ['--no-sandbox', '--disable-setuid-sandbox']
         });
@@ -48,11 +72,28 @@ async function getCookies(): Promise<string> {
     }
 
     const page = await BROWSER.newPage();
-    await page.goto("https://act.ucsd.edu/webreg2/start");
+    try {
+        log("Opened new page. Attempting to connect to WebReg site.")
+        const resp = await page.goto("https://act.ucsd.edu/webreg2/start");
+        log(`Reached ${resp.url()} with status code ${resp.status()}.`);
+        if (resp.status() < 200 || resp.status() >= 300) {
+            throw new Error("Non-OK Status Code Returned.");
+        }
+    }
+    catch (e) {
+        // Timed out probably, or failed to get page for some reason.
+        await page.close();
+        log(`An error occurred. Returning empty string. See error stack trace below.`);
+        console.info(e);
+        return "";
+    }
+
     await waitFor(3000);
     const content = await page.content();
+    // This assumes that the credentials are valid.
     if (content.includes("Signing on Using:") && content.includes("TritonLink user name")) {
-        console.info("Attempting to log in.");
+        log("Attempting to sign in to TritonLink."
+            + " If you are asked to authenticate with Duo, do NOT accept until you are told to do so.");
         // https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_Selectors
         await page.type('#ssousername', CONFIG.username);
         await page.type('#ssopassword', CONFIG.password);
@@ -62,17 +103,17 @@ async function getCookies(): Promise<string> {
 
     // No go button means we need to log in.
     if (!(await page.$('#startpage-button-go'))) {
-        console.info("Attempting to authenticate with Duo.");
+        log("Beginning Duo 2FA process. Do not accept yet.");
         // Need to find a duo iframe so we can actually authenticate 
         const possDuoFrame = await page.$("iframe[id='duo_iframe']");
         if (!possDuoFrame) {
-            console.error("no possible duo frame found.");
+            log("No possible Duo frame found. Returning empty string.");
             return "";
         }
 
         const duoFrame = await possDuoFrame.contentFrame();
         if (!duoFrame) {
-            console.error("no duo frame attached.");
+            log("Duo frame not attached. Returning empty string.");
             return "";
         }
 
@@ -82,21 +123,25 @@ async function getCookies(): Promise<string> {
         const cancelButton = await duoFrame.$(".btn-cancel");
         if (cancelButton) {
             await cancelButton.click();
+            log("Clicked the CANCEL button to cancel initial 2FA request. Do not respond to 2FA request.");
         }
 
         await waitFor(1000);
         // Remember me for 7 days
         await duoFrame.click('#remember_me_label_text');
+        log("Checked the 'Remember me for 7 days' box.");
         await waitFor(1000);
         // Send me a push 
         await duoFrame.click('#auth_methods > fieldset > div.row-label.push-label > button');
+        log("A Duo push was sent. Please respond to the new 2FA request.");
     }
 
     await page.waitForSelector('#startpage-button-go');
-    console.info("Logged in successfully.");
+    log("Logged into WebReg successfully.");
     // Get cookies ready to load.
     await page.click('#startpage-button-go');
     const cookies = await page.cookies("https://act.ucsd.edu/webreg2/svc/wradapter/secure/sched-get-schednames?termcode=SP22");
+    log("Extracted cookies and responding back with them.\n");
     return cookies.map(x => `${x.name}=${x.value}`).join("; ");
 }
 
@@ -130,14 +175,14 @@ const server = http.createServer(async (req, res) => {
 });
 
 server.listen(PORT, () => {
-    console.log(`Server listening on port ${PORT}`);
+    log(`Server listening on port ${PORT}`);
 });
 
 process.on('SIGTERM', shutDown);
 process.on('SIGINT', shutDown);
 
 async function shutDown(): Promise<void> {
-    console.log("Shutting down.");
+    log("Shutting down server.");
     BROWSER?.close();
     server.close();
 }

@@ -117,4 +117,6 @@ pub async fn track_webreg_enrollment(
             tokio::time::sleep(Duration::from_secs(3)).await;
         }
     }
+
+    writer.flush().unwrap();
 }
