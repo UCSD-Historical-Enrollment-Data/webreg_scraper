@@ -39,9 +39,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     }
 
     let w = WebRegWrapper::new(cookie.to_string(), TERM);
-    let valid = w.is_valid().await;
-
-    if !valid {
+    if !w.is_valid().await {
         println!("Failed to login.");
         return Ok(());
     }
@@ -111,7 +109,7 @@ async fn run_tracker(w: WebRegWrapper<'_>, cookie_url: Option<&str>) {
         // Basically, keep on trying until we get back into WebReg.
         let mut success = false;
         for time in TIMEOUT {
-            println!("[{}] Taking a {} second break.", time, get_pretty_time());
+            println!("[{}] Taking a {} second break.", get_pretty_time(), time);
             tokio::time::sleep(Duration::from_secs(time)).await;
 
             // Get new cookies.
@@ -152,6 +150,8 @@ async fn run_tracker(w: WebRegWrapper<'_>, cookie_url: Option<&str>) {
         // Otherwise, gracefully quit.
         break;
     }
+
+    println!("[{}] Quitting.", get_pretty_time());
 }
 
 /// Used to run some random stuff.

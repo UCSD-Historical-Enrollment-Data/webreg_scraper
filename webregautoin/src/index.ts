@@ -16,6 +16,7 @@ const CONFIG: IConfiguration = JSON.parse(
     fs.readFileSync(path.join(__dirname, "..", "credentials.json")
     ).toString());
 const PORT: number = 3000;
+const WEBREG_URL: string = "https://act.ucsd.edu/webreg2/start";
 
 interface IConfiguration {
     username: string;
@@ -74,7 +75,7 @@ async function getCookies(): Promise<string> {
     const page = await BROWSER.newPage();
     try {
         log("Opened new page. Attempting to connect to WebReg site.")
-        const resp = await page.goto("https://act.ucsd.edu/webreg2/start");
+        const resp = await page.goto(WEBREG_URL);
         log(`Reached ${resp.url()} with status code ${resp.status()}.`);
         if (resp.status() < 200 || resp.status() >= 300) {
             throw new Error("Non-OK Status Code Returned.");
@@ -82,9 +83,9 @@ async function getCookies(): Promise<string> {
     }
     catch (e) {
         // Timed out probably, or failed to get page for some reason.
-        await page.close();
         log(`An error occurred. Returning empty string. See error stack trace below.`);
         console.info(e);
+        console.info();
         return "";
     }
 
@@ -108,12 +109,14 @@ async function getCookies(): Promise<string> {
         const possDuoFrame = await page.$("iframe[id='duo_iframe']");
         if (!possDuoFrame) {
             log("No possible Duo frame found. Returning empty string.");
+            console.info();
             return "";
         }
 
         const duoFrame = await possDuoFrame.contentFrame();
         if (!duoFrame) {
             log("Duo frame not attached. Returning empty string.");
+            console.info();
             return "";
         }
 
@@ -186,3 +189,6 @@ async function shutDown(): Promise<void> {
     BROWSER?.close();
     server.close();
 }
+
+// Warm-up call.
+getCookies().then();
