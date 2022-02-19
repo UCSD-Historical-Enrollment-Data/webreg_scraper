@@ -39,7 +39,11 @@ const PLAN_REMOVE_ALL: &str = "https://act.ucsd.edu/webreg2/svc/wradapter/secure
 
 const ENROLL_ADD: &str = "https://act.ucsd.edu/webreg2/svc/wradapter/secure/add-enroll";
 const ENROLL_EDIT: &str = "https://act.ucsd.edu/webreg2/svc/wradapter/secure/edit-enroll";
-const DROP_ENROLL: &str = "https://act.ucsd.edu/webreg2/svc/wradapter/secure/drop-enroll";
+const ENROLL_DROP: &str = "https://act.ucsd.edu/webreg2/svc/wradapter/secure/drop-enroll";
+
+const WAITLIST_ADD: &str = "https://act.ucsd.edu/webreg2/svc/wradapter/secure/add-wait";
+const WAITLIST_EDIT: &str = "https://act.ucsd.edu/webreg2/svc/wradapter/secure/edit-enroll";
+const WAILIST_DROP: &str = "https://act.ucsd.edu/webreg2/svc/wradapter/secure/drop-wait";
 
 /// A wrapper for [UCSD's WebReg](https://act.ucsd.edu/webreg2/start).
 pub struct WebRegWrapper<'a> {
@@ -1107,9 +1111,11 @@ impl<'a> WebRegWrapper<'a> {
         .await
     }
 
-    /// Enrolls in a class.
+    /// Enrolls in, or waitlists, a class.
     ///
     /// # Parameters
+    /// - `is_enroll`: Whether you want to enroll. This should be `true` if you want to enroll
+    /// in this section and `false` if you want to waitlist.
     /// - `enroll_options`: Information for the course that you want to enroll in.
     /// - `validate`: Whether to validate your enrollment of this course beforehand. Note that
     /// validation isn't necessary, although it is recommended. But, perhaps you just want to
@@ -1117,7 +1123,19 @@ impl<'a> WebRegWrapper<'a> {
     ///
     /// # Returns
     /// `true` if you were enrolled in the class successfully and `false` otherwise.
-    pub async fn enroll_in_section(&self, enroll_options: EnrollAdd<'_>, validate: bool) -> bool {
+    pub async fn add_section(
+        &self,
+        is_enroll: bool,
+        enroll_options: EnrollWaitAdd<'_>,
+        validate: bool,
+    ) -> bool {
+        let base_reg_url = if is_enroll { ENROLL_ADD } else { WAITLIST_ADD };
+        let base_edit_url = if is_enroll {
+            ENROLL_EDIT
+        } else {
+            WAITLIST_EDIT
+        };
+
         let u = match enroll_options.unit_count {
             Some(r) => r.to_string(),
             None => "".to_string(),
@@ -1127,7 +1145,7 @@ impl<'a> WebRegWrapper<'a> {
             let r = self
                 ._process_response(
                     self.client
-                        .post(ENROLL_EDIT)
+                        .post(base_edit_url)
                         .form(&HashMap::from([
                             // These are required
                             ("section", &*enroll_options.section_number),
@@ -1151,7 +1169,7 @@ impl<'a> WebRegWrapper<'a> {
         let result = self
             ._process_response(
                 self.client
-                    .post(ENROLL_ADD)
+                    .post(base_reg_url)
                     .form(&HashMap::from([
                         // These are required
                         ("section", &*enroll_options.section_number),
@@ -1198,6 +1216,8 @@ impl<'a> WebRegWrapper<'a> {
     /// Drops a section.
     ///
     /// # Parameters
+    /// - `was_enrolled`: Whether you were originally enrolled in the section. This would
+    /// be `true` if you were enrolled and `false` if waitlisted.
     /// - `section_num`: The section number corresponding to the section that you want
     /// to drop.
     ///
@@ -1207,10 +1227,16 @@ impl<'a> WebRegWrapper<'a> {
     /// # Remarks
     /// It is a good idea to make a call to get your current schedule before you
     /// make a request here. That way, you know which classes can be dropped.
-    pub async fn drop_section(&self, section_num: &'a str) -> bool {
+    pub async fn drop_section(&self, was_enrolled: bool, section_num: &'a str) -> bool {
+        let base_reg_url = if was_enrolled {
+            ENROLL_DROP
+        } else {
+            WAILIST_DROP
+        };
+
         self._process_response(
             self.client
-                .post(DROP_ENROLL)
+                .post(base_reg_url)
                 .form(&HashMap::from([
                     // These parameters are optional
                     ("subjcode", ""),
@@ -1412,7 +1438,7 @@ struct GroupedSection<'a, T> {
     other_special_meetings: Vec<&'a T>,
 }
 
-pub struct EnrollAdd<'a> {
+pub struct EnrollWaitAdd<'a> {
     /// The section number. For example, `0123123`.
     pub section_number: &'a str,
     /// The grading option. Can either be L, P, or S.

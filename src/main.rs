@@ -12,7 +12,7 @@ use crate::export::exporter::save_schedules;
 use crate::schedule::scheduler::{self, ScheduleConstraint};
 use crate::util::get_pretty_time;
 use crate::webreg::webreg_wrapper::{
-    CourseLevelFilter, EnrollAdd, PlanAdd, SearchRequestBuilder, WebRegWrapper,
+    CourseLevelFilter, EnrollWaitAdd, PlanAdd, SearchRequestBuilder, WebRegWrapper,
 };
 use std::error::Error;
 use std::time::{Duration, Instant};
@@ -166,8 +166,9 @@ async fn basic_intro(w: &WebRegWrapper<'_>) {
 
     println!(
         "Attempting to enroll in MATH 95 => {}",
-        w.enroll_in_section(
-            EnrollAdd {
+        w.add_section(
+            true,
+            EnrollWaitAdd {
                 section_number: "078483",
                 grading_option: None,
                 unit_count: None,
@@ -183,7 +184,7 @@ async fn basic_intro(w: &WebRegWrapper<'_>) {
 
     println!(
         "Attempting to drop MATH 95 => {}",
-        w.drop_section("078483").await
+        w.drop_section(true, "078483").await
     );
     for c in w.get_schedule(None).await.unwrap() {
         println!("{}", c.to_string());
