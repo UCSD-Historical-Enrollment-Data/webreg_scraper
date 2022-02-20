@@ -33,68 +33,273 @@ There are a few reasons why I wanted to make this wrapper:
 - Automatically enroll in classes when possible (e.g. first/second pass is available).
 - Create possible, conflict-free, schedules.
 
-## Authentication
+## Wrapper Usage
+To use the wrapper, you need to create a new instance of it. For example:
+```rs
+let term = "SP22";
+let cookie = "your authorization cookies here";
+let w = WebRegWrapper::new(cookie.to_string(), term);
+```
+
+Where the cookies are your authentication cookies (which you can find by looking at the cookie options in the header of any WebReg API request under the `Network` tab in Developer Tools). 
+
+Once created, you're able to use the various wrapper functions. Some useful examples are shown below (note that `w` refers to the declaration above).
+
+### Check Login Status
+You can check to see if you are logged in (i.e. if the wrapper can actually perform any useful requests). 
 
 <details>
-<summary>Minor Notes.</summary>
+<summary>General Example</summary>
 <br> 
 
-Originally, one of the biggest challenge I thought I would encounter was having to get around Duo (the 2FA system we use). However, it turns out that using your cookies from a previous (active authenticated) session will work (I'm not sure why it did not work the last time I tried).
-
-In order to use the wrapper, you only need to provide the cookie that is a part of the request header (for example, when loading a new page in WebReg). You can find this cookie by going to your developer tab, monitoring the requests that WebReg makes, and then getting your cookie from there.
+```rs
+if !w.is_valid().await {
+    println!("You aren't logged in!");
+    return; 
+}
+```
 
 </details>
 
-## Remarks
+
+
+### Get Schedule
+You can get your current schedule, which lists your Enrolled, Planned, and Waitlisted courses. You are able to fetch either the default schedule (`None`) or a specific schedule (e.g. `My Schedule 2`)
 
 <details>
-<summary>Complaints about the API.</summary>
+<summary>General Example</summary>
 <br> 
+Suppose you wanted to see what courses are currently in your *default* schedule. We can use the following code:
+
+```
+let my_schedule = w.get_schedule(None).await;
+if let Some(schedule) = my_schedule {
+    for s in schedule {
+        println!("{}", s.to_string());
+    }
+}
+```
+
+This prints out:
+```
+[A05 / 75220] Ethics And Society II (POLI 28) with Elgin, Samuel Zincke - Enrolled (4 Units, L Grading, 21 / 34)
+        [LE] M at 12:00 - 12:50 in CENTR 101
+        [LE] W at 12:00 - 12:50 in CENTR 101
+        [FI] 2022-06-08 at 11:30 - 14:29 in CENTR 101
+        [DI] F at 12:00 - 12:50 in SEQUO 148
+
+... (other courses not listed)
+```
+
+**Remark:** If you wanted to see what courses you have planned in some other schedule, you can replace `None` with `Some("your schedule name here")`. 
+</details>
 
 
-WebReg's internal API is probably one of the messiest APIs I've ever used (which complements well with the fact that WebReg itself is an annoying website to scrape). Granted, it's not like we were *supposed* to use it in this fashion, but sometimes I wonder if the reason why it's this messy is just so people don't use their internal API by itself, like me.
+### Get Course Information
+You are able to search up course information for a particular course. If no authentication issues occur, then this function will return a vector where each element contains the instructor name, number of seats, and all meetings.  
 
-One reason why the code I have is so verbose is because I want to clean the internal API's JSON responses. There are a lot of things that one needs to consider when using their API. I'll name two in particular.
+<details>
+<summary>General Example</summary>
+<br> 
+Suppose we wanted to look up all CSE 101 sections. We can use the following code:
 
-### Specific Course Details in General
-For example, suppose I wanted to fetch specific details about CSE 100 (number of people enrolled, professor teaching it, etc.). I would get a JSON array where *one* element in said array could either be:
-- A JSON object representing a repeating MWF lecture. So, this object would say that the lecture occurs every MWF.
-- A JSON object representing a repeating Thursday discussion. So, this object would say that the discussion occurs every Thursday.
-- A JSON object representing a midterm. So, this object would say that the midterm occurs on Feb. 5, 2022.
-- A JSON object representing a final. So, this object would say that the final occurs on Mar. 16.
+```rs
+let courses_101 = w.get_course_info("CSE", "101").await;
+if let Some(courses) = courses_101 {
+    for c in courses {
+        println!("{}", c.to_string());
+    }
+}
+```
 
-Rather than giving me one giant JSON where each discussion has an associated lecture, midterm, and final exam, WebReg gives it to me as 4 separate entities. This might not seem terrible; however, let's consider a bigger example. Suppose I have to deal with 4 sections of Math 20C, each with 5 discussions, 2 midterms, a MWF lecture, and a final. Well, instead of giving me a JSON array with 20 elements (one element for each discussion and associated lecture/midterm/final), WebReg would give me **36 elements**:
-- 20 discussion elements.
-- 8 midterm elements.
-- 4 lecture elements.
-- 4 final elements.
+This prints out:
+```
+[CSE 101] [A01 / 079914] Dasgupta, Sanjoy: 0/116 (WL: 0)
+        [LE] TuTh at 9:30 - 10:50 in CENTR 119
+        [DI] F at 15:00 - 15:50 in CENTR 119
+        [FI] 2022-06-04 at 11:30 - 14:29 in WLH 2001
 
-So, I need to find some way to "group" all of these elements together so that I get the desired 20 elements. Another thing to mention is that the way WebReg labels meeting types like Lectures and Discussions is different from the way it labels Midterms/Finals (there's more work that needs to be done). I won't go too in-depth on that for now.
-
-### Specific Course Details in Schedule
-If you thought that the above was terrible, the internal WebReg API decided that it would be a wonderful idea to split any multiple-day repeated meetings into their own elements. So, if I had a MWF lecture, rather than giving me one JSON object representing a MWF lecture (like what you would expect *above*), WebReg gives it to me as three separate JSON objects; one object representing a Monday lecture, another representing a Wednesday lecture, and a third representing a Friday lecture.
-
-Let's suppose I was enrolled in the CSE 100 section described above (so I would have a MWF lecture, Thursday discussion, and a set midterm and final date), and I wanted to get information on my enrolled classes. Rather than giving me an array of 4 JSON objects like how I described above (which is also what you would *at least* expect if WebReg's internal API was *consistent*), they instead decided to give me a JSON array consisting of:
-- A JSON object representing a repeating Monday lecture. So, this object would say that the lecture occurs every Monday.
-- A JSON object representing a repeating Wednesday lecture. So, this object would say that the lecture occurs every Wednesday.
-- A JSON object representing a repeating Friday lecture. So, this object would say that the lecture occurs every Friday.
-- A JSON object representing a repeating Thursday discussion. So, this object would say that the discussion occurs every Thursday.
-- A JSON object representing a midterm. So, this object would say that the midterm occurs on Feb. 5, 2022.
-- A JSON object representing a final. So, this object would say that the final occurs on Mar. 16.
-
-So, if I had 4 classes each with a repeating MWF lecture, repeating one-day discussion, a midterm, and a final, I would have **28** separate elements that I would need to somehow group together.
-
-On one hand, the reason why I think they did this is so it's easier for them to display the course information on a calendar.
-
-As you can imagine, consistency isn't exactly something WebReg cares about. There's obviously a lot more that I can complain about, but I'll hold off on that for now.
+[CSE 101] [B01 / 079915] Impagliazzo, Russell: 0/116 (WL: 0)
+        [LE] TuTh at 14:00 - 15:20 in WLH 2005
+        [DI] F at 16:00 - 16:50 in CENTR 119
+        [FI] 2022-06-04 at 11:30 - 14:29 in WLH 2005
+```
 
 </details>
+
+### Search Courses
+You can also search up courses that meet a particular criteria. This is very similar in nature to the Advanced Search option.
+
+<details>
+<summary>Example: Searching by Section(s)</summary>
+<br> 
+Suppose we wanted to search for specific sections. In our example below, we'll search for one section of CSE 100, one section of Math 184, and one section of POLI 28. The following code will do just that: 
+
+```rs
+let search_res = w
+    .search_courses_detailed(SearchType::ByMultipleSections(&[
+        "079913", "078616", "075219",
+    ]))
+    .await;
+if let Some(res) = search_res {
+    for r in res {
+        println!("{}", r.to_string());
+    }
+}
+```
+
+This prints out:
+```
+[CSE 100] [B02 / 079913] Staff: 0/68 (WL: 0)
+        [LE] MWF at 10:00 - 10:50 in CENTR 119
+        [DI] W at 17:00 - 17:50 in CSB 002
+        [FI] 2022-06-04 at 8:00 - 10:59 in WLH 2005
+
+[MATH 184] [A03 / 078616] Kane, Daniel Mertz: 27/35 (WL: 0)
+        [LE] MWF at 16:00 - 16:50 in HSS 1330
+        [DI] Th at 19:00 - 19:50 in APM 7321
+        [FI] 2022-06-09 at 15:00 - 17:59 in HSS 1330
+
+[POLI 28] [A04 / 075219] Elgin, Samuel Zincke: 26/34 (WL: 0)
+        [LE] MW at 12:00 - 12:50 in CENTR 101
+        [DI] W at 16:00 - 16:50 in SOLIS 111
+        [FI] 2022-06-08 at 11:30 - 14:29 in CENTR 101
+```
+
+</details>
+
+<details>
+<summary>Example: Searching by Criteria</summary>
+<br> 
+
+Suppose we wanted to search for any lower- or upper-division CSE course. We can use the following code:
+
+```rs 
+let search_res = w
+    .search_courses_detailed(SearchType::Advanced(
+        &SearchRequestBuilder::new()
+            .add_department("CSE")
+            .filter_courses_by(CourseLevelFilter::UpperDivision)
+            .filter_courses_by(CourseLevelFilter::LowerDivision),
+    ))
+    .await;
+
+if let Some(r) = search_res{
+    for c in r {
+        println!("{}", c.to_string());
+    }
+}
+```
+
+This prints out:
+```
+[CSE 6R] [A01 / 077385] Moshiri, Alexander Niema: 14/150 (WL: 0)
+        [LE] MWF at 11:00 - 11:50 in RCLAS R05
+        [DI] W at 12:00 - 12:50 in RCLAS R05
+        [MI] 2022-04-30 at 10:00 - 10:50 in RCLAS R05
+
+... (other courses not listed)
+
+[CSE 185] [A03 / 077491] Gymrek, Melissa Ann: 34/38 (WL: 0)
+        [LE] MW at 11:00 - 11:50 in CENTR 105
+        [LA] MW at 13:00 - 14:50 in EBU3B B270
+```
+
+</details>
+
+
+
+### Enroll in Section
+You can use the wrapper to plan or enroll in a particular section. 
+
+<details>
+<summary>Planning a Course</summary>
+<br> 
+Suppose you wanted to plan a section of CSE 100 to your default schedule. You can use the following code:
+
+```rs
+w.add_to_plan(PlanAdd {
+    subject_code: "CSE",
+    course_code: "100",
+    section_number: "079911",
+    section_code: "A01",
+    // Using S/U grading.
+    grading_option: Some("S"),
+    // Put in default schedule
+    schedule_name: None,
+    unit_count: 4
+}, true).await;
+```
+
+This will return `true` if the planning succeeded and `false` otherwise.
+
+**Remark:** If you wanted to see what courses you have planned in some other schedule, you can replace `None` with `Some("your schedule name here")`. 
+
+</details>
+
+<details>
+<summary>Unplanning a Course</summary>
+<br> 
+Suppose you want to remove the section of CSE 100 from your default schedule. You can use the following code:
+
+```rs
+w.remove_from_plan("079911", None).await;
+```
+
+This will return `true` if the removal succeeded and `false` otherwise.
+
+**Remark:** If you wanted to see what courses you have planned in some other schedule, you can replace `None` with `Some("your schedule name here")`. 
+
+</details>
+
+<details>
+<summary>Enrolling in, or Waitlisting, a Course</summary>
+<br> 
+Suppose your enrollment time is here and you want to enroll/waitlist in a specific section of CSE 95. You can use the following code:
+
+```rs
+w.add_section(
+    // To waitlist, use `false` instead.
+    true,
+    EnrollWaitAdd {
+        // All you need is a section ID
+        section_number: "078483",
+        // Using the default grading option
+        grading_option: None,
+        // And the default unit count
+        unit_count: None,
+    },
+    true
+)await
+```
+
+This will return `true` if you were able to enroll/waitlist in the section and `false` otherwise. Additionally, if you are able to enroll/waitlist in said section, this function will also call an API endpoint which unplans said class from all of your schedules.
+
+</details>
+
+<details>
+<summary>Dropping a Course</summary>
+<br> 
+Suppose your enrollment time is here and you decide to drop CSE 95. You can use the following code:
+
+```rs
+// If this course is on the waitlist, use `false` instead.
+w.drop_section(true, "078483").await
+```
+
+This will return `true` if dropping was successful and `false` otherwise.
+
+
+</details>
+
+
+
 
 ## Disclaimer
 I am not responsible for any damages or other issue(s) caused by any use of this wrapper. In other words, by using this wrapper, I am not responsible if you somehow get in trouble or otherwise run into problems.
 
 ## Want Data?
-Specifically, how fast a lower- or upper-division CSE/COGS/MATH/ECE course fills up for Spring 2022? [Here you go.](https://github.com/ewang2002/UCSDHistEnrollData)
+Specifically, how fast a lower- or upper-division CSE/COGS/MATH/ECE course fills up in Spring 2022? [Here you go.](https://github.com/ewang2002/UCSDHistEnrollData)
 
 ## License
 All code provided in this repository is licensed under the MIT license. 

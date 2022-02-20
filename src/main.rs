@@ -156,10 +156,9 @@ async fn run_tracker(w: WebRegWrapper<'_>, cookie_url: Option<&str>) {
     println!("[{}] Quitting.", get_pretty_time());
 }
 
-
 /// Attempts to enroll in a random section, and then unenroll after. This prints
 /// the schedule out.
-/// 
+///
 /// # Parameters
 /// - `w`: The wrapper.
 async fn test_enroll_unenroll(w: &WebRegWrapper<'_>) {
@@ -255,7 +254,10 @@ async fn section_parse(w: &WebRegWrapper<'_>) {
     }
 
     println!("=============================");
-    println!("{} sections that can be enrolled vs. {} sections parsed.", ct_a, ct_b);
+    println!(
+        "{} sections that can be enrolled vs. {} sections parsed.",
+        ct_a, ct_b
+    );
 
     println!("=============================");
     let schedule = w.get_schedule(Some("Test")).await.unwrap();
