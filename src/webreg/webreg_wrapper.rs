@@ -19,6 +19,8 @@ const DEFAULT_SCHEDULE_NAME: &str = "My Schedule";
 // Random WebReg links
 const WEBREG_BASE: &str = "https://act.ucsd.edu/webreg2";
 const WEBREG_SEARCH: &str = "https://act.ucsd.edu/webreg2/svc/wradapter/secure/search-by-all?";
+const WEBREG_SEARCH_SEC: &str =
+    "https://act.ucsd.edu/webreg2/svc/wradapter/secure/search-by-sectionid?";
 const ACC_NAME: &str = "https://act.ucsd.edu/webreg2/svc/wradapter/get-current-name";
 const COURSE_DATA: &str =
     "https://act.ucsd.edu/webreg2/svc/wradapter/secure/search-load-group-data?";
@@ -747,15 +749,46 @@ impl<'a> WebRegWrapper<'a> {
     /// is not recommended as you may get rate-limited.
     ///
     /// # Parameters
-    /// - `request_filter`: The request filter.
+    /// - `filter_by`: The request filter.
     ///
     /// # Returns
     /// A vector consisting of all courses that are available, with detailed information.
     pub async fn search_courses_detailed(
         &self,
-        request_filter: SearchRequestBuilder<'a>,
+        filter_by: SearchType<'_>,
     ) -> Option<Vec<CourseSection>> {
-        let search_res = match self.search_courses(&request_filter).await {
+        let get_zero_trim = |s: &[u8]| -> (usize, usize) {
+            let start = s.iter().position(|p| *p != b'0').unwrap_or(0);
+            let end = s.iter().rposition(|p| *p != b'0').unwrap_or(0);
+            // "0001000" -> (3, 4)  | "0001000"[3..4] = "1"
+            // "0000" -> (0, 0)     | "0000"[0..0] = ""
+            // "00100100" -> (2, 6) | "00100100"[2..6] = "1001"
+            (
+                start,
+                if start == end && start == 0 {
+                    0
+                } else {
+                    end + 1
+                },
+            )
+        };
+
+        let mut ids_to_filter = vec![];
+        match filter_by {
+            SearchType::BySection(s) => {
+                let (start, end) = get_zero_trim(s.as_bytes());
+                ids_to_filter.push(&s[start..end]);
+            }
+            SearchType::ByMultipleSections(s) => {
+                s.iter().for_each(|t| {
+                    let (start, end) = get_zero_trim(t.as_bytes());
+                    ids_to_filter.push(&t[start..end]);
+                });
+            }
+            SearchType::Advanced(_) => {}
+        };
+
+        let search_res = match self.search_courses(filter_by).await {
             Some(r) => r,
             None => return None,
         };
@@ -766,7 +799,15 @@ impl<'a> WebRegWrapper<'a> {
                 .get_course_info(r.subj_code.trim(), r.course_code.trim())
                 .await;
             match req_res {
-                Some(r) => r.into_iter().for_each(|x| vec.push(x)),
+                Some(r) => r.into_iter().for_each(|x| {
+                    if !ids_to_filter.is_empty() {
+                        let (start, end) = get_zero_trim(x.section_id.as_bytes());
+                        if !ids_to_filter.contains(&&x.section_id.as_str()[start..end]) {
+                            return;
+                        }
+                    }
+                    vec.push(x);
+                }),
                 None => break,
             };
         }
@@ -778,123 +819,140 @@ impl<'a> WebRegWrapper<'a> {
     /// menu. Thus, only basic details are shown.
     ///
     /// # Parameters
-    /// - `request_filter`: The request filter.
+    /// - `filter_by`: The request filter.
     ///
     /// # Returns
     /// A vector consisting of all courses that are available.
     pub async fn search_courses(
         &self,
-        request_filter: &SearchRequestBuilder<'a>,
+        filter_by: SearchType<'_>,
     ) -> Option<Vec<WebRegSearchResultItem>> {
-        let subject_code = if request_filter.subjects.is_empty() {
-            "".to_string()
-        } else {
-            request_filter.subjects.join(":")
-        };
+        let url = match filter_by {
+            SearchType::BySection(section) => Url::parse_with_params(
+                WEBREG_SEARCH_SEC,
+                &[("sectionid", section), ("termcode", self.term)],
+            )
+            .unwrap(),
+            SearchType::ByMultipleSections(sections) => Url::parse_with_params(
+                WEBREG_SEARCH_SEC,
+                &[
+                    ("sectionid", sections.join(":").as_str()),
+                    ("termcode", self.term),
+                ],
+            )
+            .unwrap(),
+            SearchType::Advanced(request_filter) => {
+                let subject_code = if request_filter.subjects.is_empty() {
+                    "".to_string()
+                } else {
+                    request_filter.subjects.join(":")
+                };
 
-        let course_code = if request_filter.courses.is_empty() {
-            "".to_string()
-        } else {
-            // This can probably be made significantly more efficient
-            request_filter
-                .courses
-                .iter()
-                .map(|x| x.split_whitespace().collect::<Vec<_>>())
-                .map(|course| {
-                    course
-                        .into_iter()
-                        .map(|x| self._get_formatted_course_code(x))
+                let course_code = if request_filter.courses.is_empty() {
+                    "".to_string()
+                } else {
+                    // This can probably be made significantly more efficient
+                    request_filter
+                        .courses
+                        .iter()
+                        .map(|x| x.split_whitespace().collect::<Vec<_>>())
+                        .map(|course| {
+                            course
+                                .into_iter()
+                                .map(|x| self._get_formatted_course_code(x))
+                                .collect::<Vec<_>>()
+                                .join(":")
+                        })
                         .collect::<Vec<_>>()
-                        .join(":")
-                })
-                .collect::<Vec<_>>()
-                .join(";")
-                .to_uppercase()
-        };
+                        .join(";")
+                        .to_uppercase()
+                };
 
-        let department = if request_filter.departments.is_empty() {
-            "".to_string()
-        } else {
-            request_filter.departments.join(":")
-        };
+                let department = if request_filter.departments.is_empty() {
+                    "".to_string()
+                } else {
+                    request_filter.departments.join(":")
+                };
 
-        let professor = match request_filter.instructor {
-            Some(r) => r.to_uppercase(),
-            None => "".to_string(),
-        };
-
-        let title = match request_filter.title {
-            Some(r) => r.to_uppercase(),
-            None => "".to_string(),
-        };
-
-        let levels = if request_filter.level_filter == 0 {
-            "".to_string()
-        } else {
-            // Needs to be exactly 12 digits
-            let mut s = format!("{:b}", request_filter.level_filter);
-            while s.len() < 12 {
-                s.insert(0, '0');
-            }
-
-            s
-        };
-
-        let days = if request_filter.days == 0 {
-            "".to_string()
-        } else {
-            // Needs to be exactly 7 digits
-            let mut s = format!("{:b}", request_filter.days);
-            while s.len() < 7 {
-                s.insert(0, '0');
-            }
-
-            s
-        };
-
-        let time_str = {
-            if request_filter.start_time.is_none() && request_filter.end_time.is_none() {
-                "".to_string()
-            } else {
-                let start_time = match request_filter.start_time {
-                    Some((h, m)) => format!("{:0>2}{:0>2}", h, m),
+                let professor = match request_filter.instructor {
+                    Some(r) => r.to_uppercase(),
                     None => "".to_string(),
                 };
 
-                let end_time = match request_filter.end_time {
-                    Some((h, m)) => format!("{:0>2}{:0>2}", h, m),
+                let title = match request_filter.title {
+                    Some(r) => r.to_uppercase(),
                     None => "".to_string(),
                 };
 
-                format!("{}:{}", start_time, end_time)
-            }
-        };
+                let levels = if request_filter.level_filter == 0 {
+                    "".to_string()
+                } else {
+                    // Needs to be exactly 12 digits
+                    let mut s = format!("{:b}", request_filter.level_filter);
+                    while s.len() < 12 {
+                        s.insert(0, '0');
+                    }
 
-        let url = Url::parse_with_params(
-            WEBREG_SEARCH,
-            &[
-                ("subjcode", &*subject_code),
-                ("crsecode", &*course_code),
-                ("department", &*department),
-                ("professor", &*professor),
-                ("title", &*title),
-                ("levels", &*levels),
-                ("days", &*days),
-                ("timestr", &*time_str),
-                (
-                    "opensection",
-                    if request_filter.only_open {
-                        "true"
+                    s
+                };
+
+                let days = if request_filter.days == 0 {
+                    "".to_string()
+                } else {
+                    // Needs to be exactly 7 digits
+                    let mut s = format!("{:b}", request_filter.days);
+                    while s.len() < 7 {
+                        s.insert(0, '0');
+                    }
+
+                    s
+                };
+
+                let time_str = {
+                    if request_filter.start_time.is_none() && request_filter.end_time.is_none() {
+                        "".to_string()
                     } else {
-                        "false"
-                    },
-                ),
-                ("isbasic", "true"),
-                ("basicsearchvalue", ""),
-                ("termcode", self.term),
-            ],
-        )
-        .unwrap();
+                        let start_time = match request_filter.start_time {
+                            Some((h, m)) => format!("{:0>2}{:0>2}", h, m),
+                            None => "".to_string(),
+                        };
+
+                        let end_time = match request_filter.end_time {
+                            Some((h, m)) => format!("{:0>2}{:0>2}", h, m),
+                            None => "".to_string(),
+                        };
+
+                        format!("{}:{}", start_time, end_time)
+                    }
+                };
+
+                Url::parse_with_params(
+                    WEBREG_SEARCH,
+                    &[
+                        ("subjcode", &*subject_code),
+                        ("crsecode", &*course_code),
+                        ("department", &*department),
+                        ("professor", &*professor),
+                        ("title", &*title),
+                        ("levels", &*levels),
+                        ("days", &*days),
+                        ("timestr", &*time_str),
+                        (
+                            "opensection",
+                            if request_filter.only_open {
+                                "true"
+                            } else {
+                                "false"
+                            },
+                        ),
+                        ("isbasic", "true"),
+                        ("basicsearchvalue", ""),
+                        ("termcode", self.term),
+                    ],
+                )
+                .unwrap()
+            }
+        };
 
         let res = self
             .client
@@ -1694,4 +1752,16 @@ pub enum CourseLevelFilter {
     Lvl400,
     /// Level 500+ courses
     Lvl500,
+}
+
+/// Lets you choose how you want to search for a course.
+pub enum SearchType<'a> {
+    /// Searches for a course by section ID.
+    BySection(&'a str),
+
+    /// Searches for a course by more than one section ID.
+    ByMultipleSections(&'a [&'a str]),
+
+    /// Searches for a (set of) course(s) by multiple specifications.
+    Advanced(&'a SearchRequestBuilder<'a>),
 }

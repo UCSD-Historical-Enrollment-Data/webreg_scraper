@@ -12,7 +12,7 @@ use crate::export::exporter::save_schedules;
 use crate::schedule::scheduler::{self, ScheduleConstraint};
 use crate::util::get_pretty_time;
 use crate::webreg::webreg_wrapper::{
-    CourseLevelFilter, EnrollWaitAdd, PlanAdd, SearchRequestBuilder, WebRegWrapper,
+    CourseLevelFilter, EnrollWaitAdd, PlanAdd, SearchRequestBuilder, SearchType, WebRegWrapper,
 };
 use std::error::Error;
 use std::time::{Duration, Instant};
@@ -160,6 +160,33 @@ async fn run_tracker(w: WebRegWrapper<'_>, cookie_url: Option<&str>) {
 /// - `w`: The wrapper.
 #[allow(dead_code)]
 async fn basic_intro(w: &WebRegWrapper<'_>) {
+    // Test filtering specific sections from different departments
+    if let Some(r) = w
+        .search_courses_detailed(SearchType::ByMultipleSections(&[
+            "079913", "078616", "075219",
+        ]))
+        .await
+    {
+        for c in r {
+            println!("{}", c.to_string());
+        }
+    }
+
+    println!("=============================");
+    // Test general search
+    if let Some(r) = w
+        .search_courses_detailed(SearchType::Advanced(
+            &SearchRequestBuilder::new().add_course("MATH 154"),
+        ))
+        .await
+    {
+        for c in r {
+            println!("{}", c.to_string());
+        }
+    }
+
+    println!("=============================");
+
     for c in w.get_schedule(None).await.unwrap() {
         println!("{}", c.to_string());
     }
@@ -249,7 +276,10 @@ async fn get_schedules(
     for c in classes {
         search = search.add_course(c);
     }
-    let search_res = w.search_courses_detailed(search).await.unwrap();
+    let search_res = w
+        .search_courses_detailed(SearchType::Advanced(&search))
+        .await
+        .unwrap();
 
     println!("Found {} sections!", search_res.len());
     if print {

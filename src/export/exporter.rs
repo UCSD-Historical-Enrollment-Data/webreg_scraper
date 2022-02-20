@@ -1,6 +1,6 @@
 use crate::{
     schedule::scheduler::Schedule,
-    webreg::webreg_wrapper::{SearchRequestBuilder, WebRegWrapper},
+    webreg::webreg_wrapper::{SearchRequestBuilder, SearchType, WebRegWrapper},
 };
 use std::{
     fs::OpenOptions,
@@ -72,7 +72,10 @@ pub async fn export_all_sections(w: &WebRegWrapper<'_>) {
 
     // Empty builder so we can get all courses
     let s = SearchRequestBuilder::new();
-    let results = w.search_courses(&s).await.unwrap_or_default();
+    let results = w
+        .search_courses(SearchType::Advanced(&s))
+        .await
+        .unwrap_or_default();
 
     for res in results {
         w.get_course_info(res.subj_code.trim(), res.course_code.trim())

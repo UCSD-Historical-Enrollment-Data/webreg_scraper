@@ -1,4 +1,5 @@
 use crate::util::{get_epoch_time, get_pretty_time};
+use crate::webreg::webreg_wrapper::SearchType;
 use crate::{SearchRequestBuilder, WebRegWrapper};
 use std::fs::OpenOptions;
 use std::io::{BufWriter, Write};
@@ -40,7 +41,10 @@ pub async fn track_webreg_enrollment(
     let mut fail_count = 0;
     'main: loop {
         writer.flush().unwrap();
-        let results = wrapper.search_courses(search_res).await.unwrap_or_default();
+        let results = wrapper
+            .search_courses(SearchType::Advanced(search_res))
+            .await
+            .unwrap_or_default();
 
         if results.is_empty() {
             eprintln!("[{}] No courses found. Exiting.", get_pretty_time());
