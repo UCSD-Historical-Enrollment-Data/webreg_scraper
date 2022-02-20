@@ -18,6 +18,7 @@ use std::error::Error;
 use std::time::{Duration, Instant};
 
 const TERM: &str = "SP22";
+const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 #[cfg(debug_assertions)]
 const TIMEOUT: [u64; 3] = [5, 10, 15];
@@ -31,6 +32,7 @@ const TIMEOUT: [u64; 3] = [8 * 60, 6 * 60, 4 * 60];
 // a better interface for general users.
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<(), Box<dyn Error>> {
+    println!("WebRegWrapper Version {}\n", VERSION);
     let cookie = get_cookies();
     let cookie = cookie.trim();
     if cookie.is_empty() {
@@ -50,7 +52,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     );
 
     if cfg!(debug_assertions) {
-        basic_intro(&w).await;
+        section_search_filter(&w).await;
     } else {
         run_tracker(w, Some("http://localhost:3000/cookie")).await;
     }
@@ -154,39 +156,13 @@ async fn run_tracker(w: WebRegWrapper<'_>, cookie_url: Option<&str>) {
     println!("[{}] Quitting.", get_pretty_time());
 }
 
-/// Used to run some random stuff.
-///
+
+/// Attempts to enroll in a random section, and then unenroll after. This prints
+/// the schedule out.
+/// 
 /// # Parameters
 /// - `w`: The wrapper.
-#[allow(dead_code)]
-async fn basic_intro(w: &WebRegWrapper<'_>) {
-    // Test filtering specific sections from different departments
-    if let Some(r) = w
-        .search_courses_detailed(SearchType::ByMultipleSections(&[
-            "079913", "078616", "075219",
-        ]))
-        .await
-    {
-        for c in r {
-            println!("{}", c.to_string());
-        }
-    }
-
-    println!("=============================");
-    // Test general search
-    if let Some(r) = w
-        .search_courses_detailed(SearchType::Advanced(
-            &SearchRequestBuilder::new().add_course("MATH 154"),
-        ))
-        .await
-    {
-        for c in r {
-            println!("{}", c.to_string());
-        }
-    }
-
-    println!("=============================");
-
+async fn test_enroll_unenroll(w: &WebRegWrapper<'_>) {
     for c in w.get_schedule(None).await.unwrap() {
         println!("{}", c.to_string());
     }
@@ -218,12 +194,47 @@ async fn basic_intro(w: &WebRegWrapper<'_>) {
     }
 }
 
-/// Performs a basic test of the `WebRegWrapper`.
+/// Tests the section filter functionality.
 ///
 /// # Parameters
 /// - `w`: The wrapper.
 #[allow(dead_code)]
-async fn basic_tests(w: &WebRegWrapper<'_>) {
+async fn section_search_filter(w: &WebRegWrapper<'_>) {
+    // Test filtering specific sections from different departments
+    if let Some(r) = w
+        .search_courses_detailed(SearchType::ByMultipleSections(&[
+            "079913", "078616", "075219",
+        ]))
+        .await
+    {
+        for c in r {
+            println!("{}", c.to_string());
+        }
+    }
+
+    println!("=============================");
+    // Test general search
+    if let Some(r) = w
+        .search_courses_detailed(SearchType::Advanced(
+            &SearchRequestBuilder::new().add_course("MATH 154"),
+        ))
+        .await
+    {
+        for c in r {
+            println!("{}", c.to_string());
+        }
+    }
+
+    println!("=============================");
+}
+
+/// Compares the number of sections that can be enrolled to the number
+/// of sections that were parsed successfully.
+///
+/// # Parameters
+/// - `w`: The wrapper.
+#[allow(dead_code)]
+async fn section_parse(w: &WebRegWrapper<'_>) {
     const SUBJECT_CODE: &str = "MAE";
     const COURSE_CODE: &str = "30B";
     // Search stuff.
@@ -244,7 +255,7 @@ async fn basic_tests(w: &WebRegWrapper<'_>) {
     }
 
     println!("=============================");
-    println!("{} enrollment count vs. {} sections parsed.", ct_a, ct_b);
+    println!("{} sections that can be enrolled vs. {} sections parsed.", ct_a, ct_b);
 
     println!("=============================");
     let schedule = w.get_schedule(Some("Test")).await.unwrap();
