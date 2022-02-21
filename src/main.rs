@@ -52,7 +52,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     );
 
     if cfg!(debug_assertions) {
-        section_search_filter(&w).await;
+        test_enroll_unenroll(&w).await;
     } else {
         run_tracker(w, Some("http://localhost:3000/cookie")).await;
     }
@@ -166,12 +166,16 @@ async fn test_enroll_unenroll(w: &WebRegWrapper<'_>) {
         println!("{}", c.to_string());
     }
 
+    println!("==========================================");
+
+    let math_180 = w.search_courses_detailed(SearchType::BySection("078582")).await.unwrap();
+    assert_eq!(1, math_180.len());
     println!(
-        "Attempting to enroll in MATH 95 => {}",
+        "Attempting to enroll in, or waitlist, MATH 180A => {}",
         w.add_section(
-            true,
+            math_180[0].available_seats > 0,
             EnrollWaitAdd {
-                section_number: "078483",
+                section_number: "078582",
                 grading_option: None,
                 unit_count: None,
             },
@@ -180,14 +184,24 @@ async fn test_enroll_unenroll(w: &WebRegWrapper<'_>) {
         .await
     );
 
-    for c in w.get_schedule(None).await.unwrap() {
-        println!("{}", c.to_string());
-    }
-
+    let hisc_108 = w.search_courses_detailed(SearchType::BySection("073819")).await.unwrap();
+    assert_eq!(1, math_180.len());
     println!(
-        "Attempting to drop MATH 95 => {}",
-        w.drop_section(true, "078483").await
+        "Attempting to enroll in, or waitlist, HISC 108 => {}",
+        w.add_section(
+            hisc_108[0].available_seats > 0,
+            EnrollWaitAdd {
+                section_number: "073819",
+                grading_option: None,
+                unit_count: None,
+            },
+            true
+        )
+        .await
     );
+
+    println!("==========================================");
+
     for c in w.get_schedule(None).await.unwrap() {
         println!("{}", c.to_string());
     }

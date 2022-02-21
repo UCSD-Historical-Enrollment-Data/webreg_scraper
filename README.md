@@ -71,7 +71,7 @@ You can get your current schedule, which lists your Enrolled, Planned, and Waitl
 <br> 
 Suppose you wanted to see what courses are currently in your *default* schedule. We can use the following code:
 
-```
+```rs
 let my_schedule = w.get_schedule(None).await;
 if let Some(schedule) = my_schedule {
     for s in schedule {
