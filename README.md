@@ -20,7 +20,7 @@ Below are some features that this wrapper has, along with what I plan on working
 - [x] Changing grading option.
 - [x] Enrolling in, or dropping, a class.
 - [x] Planning, or un-planning, a class.
-- [x] Waitlisting a class [**Untested**].
+- [x] Waitlisting a class.
 
 ### iii. Miscellaneous (Low-Priority)
 - [x] Creating, or removing/renaming, a schedule.

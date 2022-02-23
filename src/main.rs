@@ -168,30 +168,15 @@ async fn test_enroll_unenroll(w: &WebRegWrapper<'_>) {
 
     println!("==========================================");
 
-    let math_180 = w.search_courses_detailed(SearchType::BySection("078582")).await.unwrap();
-    assert_eq!(1, math_180.len());
+    let course = w.search_courses_detailed(SearchType::BySection("079588")).await.unwrap();
+    assert_eq!(1, course.len());
     println!(
-        "Attempting to enroll in, or waitlist, MATH 180A => {}",
+        "Attempting to enroll in, or waitlist, {} => {}",
+        course[0].subj_course_id,
         w.add_section(
-            math_180[0].available_seats > 0,
+            course[0].available_seats > 0,
             EnrollWaitAdd {
-                section_number: "078582",
-                grading_option: None,
-                unit_count: None,
-            },
-            true
-        )
-        .await
-    );
-
-    let hisc_108 = w.search_courses_detailed(SearchType::BySection("073819")).await.unwrap();
-    assert_eq!(1, math_180.len());
-    println!(
-        "Attempting to enroll in, or waitlist, HISC 108 => {}",
-        w.add_section(
-            hisc_108[0].available_seats > 0,
-            EnrollWaitAdd {
-                section_number: "073819",
+                section_number: &course[0].section_id,
                 grading_option: None,
                 unit_count: None,
             },

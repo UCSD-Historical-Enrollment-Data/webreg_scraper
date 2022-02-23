@@ -44,7 +44,7 @@ const ENROLL_EDIT: &str = "https://act.ucsd.edu/webreg2/svc/wradapter/secure/edi
 const ENROLL_DROP: &str = "https://act.ucsd.edu/webreg2/svc/wradapter/secure/drop-enroll";
 
 const WAITLIST_ADD: &str = "https://act.ucsd.edu/webreg2/svc/wradapter/secure/add-wait";
-const WAITLIST_EDIT: &str = "https://act.ucsd.edu/webreg2/svc/wradapter/secure/edit-enroll";
+const WAITLIST_EDIT: &str = "https://act.ucsd.edu/webreg2/svc/wradapter/secure/edit-wait";
 const WAILIST_DROP: &str = "https://act.ucsd.edu/webreg2/svc/wradapter/secure/drop-wait";
 
 /// A wrapper for [UCSD's WebReg](https://act.ucsd.edu/webreg2/start).
