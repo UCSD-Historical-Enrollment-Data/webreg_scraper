@@ -15,13 +15,7 @@ use std::time::{Duration, Instant};
 /// - `w`: The wrapper.
 #[allow(dead_code)]
 pub async fn run_basic_tests(w: &WebRegWrapper<'_>) {
-    for c in w.get_schedule(None).await.unwrap() {
-        println!("{}", c.to_string());
-    }
-    /*
-    for c in w.get_course_info("CSE", "127").await.unwrap() {
-        println!("{}", c.to_string());
-    } */
+    test_enroll_unenroll(w, false).await;
 }
 
 /// Attempts to enroll in a random section, and then unenroll after. This prints
@@ -30,7 +24,7 @@ pub async fn run_basic_tests(w: &WebRegWrapper<'_>) {
 /// # Parameters
 /// - `w`: The wrapper.
 #[allow(dead_code)]
-pub async fn test_enroll_unenroll(w: &WebRegWrapper<'_>) {
+pub async fn test_enroll_unenroll(w: &WebRegWrapper<'_>, test_enroll: bool) {
     for c in w.get_schedule(None).await.unwrap() {
         println!("{}", c.to_string());
     }
@@ -38,24 +32,46 @@ pub async fn test_enroll_unenroll(w: &WebRegWrapper<'_>) {
     println!("==========================================");
 
     let course = w
-        .search_courses_detailed(SearchType::BySection("079588"))
+        .search_courses_detailed(SearchType::BySection("079911"))
         .await
         .unwrap();
-    assert_eq!(1, course.len());
-    println!(
-        "Attempting to enroll in, or waitlist, {} => {}",
-        course[0].subj_course_id,
-        w.add_section(
-            course[0].available_seats > 0,
-            EnrollWaitAdd {
-                section_number: &course[0].section_id,
-                grading_option: None,
-                unit_count: None,
-            },
-            true
-        )
-        .await
-    );
+
+    if test_enroll {
+        assert_eq!(1, course.len());
+        println!(
+            "Attempting to enroll in, or waitlist, {} => {:?}",
+            course[0].subj_course_id,
+            w.add_section(
+                course[0].available_seats > 0,
+                EnrollWaitAdd {
+                    section_number: &course[0].section_id,
+                    grading_option: None,
+                    unit_count: None,
+                },
+                true
+            )
+            .await
+        );
+    } else {
+        let (subj, crsc) = course[0].subj_course_id.split_once(" ").unwrap();
+        println!(
+            "Attempting to plan {} => {:?}",
+            course[0].subj_course_id,
+            w.add_to_plan(
+                PlanAdd {
+                    subject_code: subj,
+                    course_code: crsc,
+                    section_number: &course[0].section_id,
+                    section_code: &course[0].section_code,
+                    grading_option: Some("L"),
+                    schedule_name: None,
+                    unit_count: 4
+                },
+                true
+            )
+            .await
+        );
+    }
 
     println!("==========================================");
 
@@ -219,7 +235,8 @@ pub async fn get_schedules(
                     },
                     true,
                 )
-                .await;
+                .await
+                .unwrap_or_else(|_| false);
                 tokio::time::sleep(Duration::from_secs(1)).await;
                 continue;
             }

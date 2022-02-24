@@ -1044,11 +1044,16 @@ impl<'a> WebRegWrapper<'a> {
     /// `P` (pass/no pass), or `S` (satisfactory/unsatisfactory).
     ///
     /// # Returns
-    /// `true` if the process succeeded or `false` otherwise.
-    pub async fn change_grading_option(&self, section_number: i64, new_grade_opt: &str) -> bool {
+    /// `true` if the process succeeded, or a string containing the error message from WebReg if
+    /// something wrong happened.
+    pub async fn change_grading_option(
+        &self,
+        section_number: i64,
+        new_grade_opt: &str,
+    ) -> Result<bool, Cow<'a, str>> {
         match new_grade_opt {
             "L" | "P" | "S" => {}
-            _ => return false,
+            _ => return Err("Invalid grade option.".into()),
         };
 
         let poss_class = self
@@ -1059,7 +1064,7 @@ impl<'a> WebRegWrapper<'a> {
             .find(|x| x.section_number == section_number);
 
         if poss_class.is_none() {
-            return false;
+            return Err("Class not found.".into());
         }
 
         // don't care about previous poss_class
@@ -1101,8 +1106,13 @@ impl<'a> WebRegWrapper<'a> {
     /// these options can visually break WebReg (e.g. Remove/Enroll button will not appear).
     ///
     /// # Returns
-    /// `true` if the course was planned successfully and `false` otherwise.
-    pub async fn add_to_plan(&self, plan_options: PlanAdd<'_>, validate: bool) -> bool {
+    /// `true` if the process succeeded, or a string containing the error message from WebReg if
+    /// something wrong happened.
+    pub async fn add_to_plan(
+        &self,
+        plan_options: PlanAdd<'_>,
+        validate: bool,
+    ) -> Result<bool, Cow<'a, str>> {
         let u = plan_options.unit_count.to_string();
         let crsc_code = self._get_formatted_course_code(plan_options.course_code);
 
@@ -1125,7 +1135,8 @@ impl<'a> WebRegWrapper<'a> {
                     .send()
                     .await,
             )
-            .await;
+            .await
+            .unwrap_or_else(|_| false);
         }
 
         self._process_response(
@@ -1168,12 +1179,13 @@ impl<'a> WebRegWrapper<'a> {
     /// - `schedule_name`: The schedule name where the course should be unplanned from.
     ///
     /// # Returns
-    /// `true` if the course was unplanned successfully and `false` otherwise.
+    /// `true` if the process succeeded, or a string containing the error message from WebReg if
+    /// something wrong happened.
     pub async fn remove_from_plan(
         &self,
         section_num: &str,
         schedule_name: Option<&'a str>,
-    ) -> bool {
+    ) -> Result<bool, Cow<'a, str>> {
         self._process_response(
             self.client
                 .post(PLAN_REMOVE)
@@ -1201,13 +1213,14 @@ impl<'a> WebRegWrapper<'a> {
     /// make one less request.
     ///
     /// # Returns
-    /// `true` if you were enrolled in the class successfully and `false` otherwise.
+    /// `true` if the process succeeded, or a string containing the error message from WebReg if
+    /// something wrong happened.
     pub async fn add_section(
         &self,
         is_enroll: bool,
         enroll_options: EnrollWaitAdd<'_>,
         validate: bool,
-    ) -> bool {
+    ) -> Result<bool, Cow<'a, str>> {
         let base_reg_url = if is_enroll { ENROLL_ADD } else { WAITLIST_ADD };
         let base_edit_url = if is_enroll {
             ENROLL_EDIT
@@ -1240,8 +1253,8 @@ impl<'a> WebRegWrapper<'a> {
                 )
                 .await;
 
-            if !r {
-                return false;
+            if r.is_err() {
+                return r;
             }
         }
 
@@ -1272,8 +1285,8 @@ impl<'a> WebRegWrapper<'a> {
             )
             .await;
 
-        if !result {
-            return false;
+        if result.is_err() {
+            return result;
         }
 
         // This will always return true
@@ -1301,12 +1314,17 @@ impl<'a> WebRegWrapper<'a> {
     /// to drop.
     ///
     /// # Returns
-    /// `true` if you were dropped from the class successfully and `false` otherwise.
+    /// `true` if the process succeeded, or a string containing the error message from WebReg if
+    /// something wrong happened.
     ///
     /// # Remarks
     /// It is a good idea to make a call to get your current schedule before you
     /// make a request here. That way, you know which classes can be dropped.
-    pub async fn drop_section(&self, was_enrolled: bool, section_num: &'a str) -> bool {
+    pub async fn drop_section(
+        &self,
+        was_enrolled: bool,
+        section_num: &'a str,
+    ) -> Result<bool, Cow<'a, str>> {
         let base_reg_url = if was_enrolled {
             ENROLL_DROP
         } else {
@@ -1372,11 +1390,16 @@ impl<'a> WebRegWrapper<'a> {
     /// - `new_name`: The name that you want to change the old name to.
     ///
     /// # Returns
-    /// `true` if the renaming was successful and `false` otherwise.
-    pub async fn rename_schedule(&self, old_name: &str, new_name: &str) -> bool {
+    /// `true` if the process succeeded, or a string containing the error message from WebReg if
+    /// something wrong happened.
+    pub async fn rename_schedule(
+        &self,
+        old_name: &str,
+        new_name: &str,
+    ) -> Result<bool, Cow<'a, str>> {
         // Can't rename your default schedule.
         if old_name == DEFAULT_SCHEDULE_NAME {
-            return false;
+            return Err("You cannot rename the default schedule".into());
         }
 
         self._process_response(
@@ -1401,11 +1424,12 @@ impl<'a> WebRegWrapper<'a> {
     /// - `schedule_name`: The name of the schedule to delete.
     ///
     /// # Returns
-    /// `true` if the deletion was successful and `false` otherwise.
-    pub async fn remove_schedule(&self, schedule_name: &str) -> bool {
+    /// `true` if the process succeeded, or a string containing the error message from WebReg if
+    /// something wrong happened.
+    pub async fn remove_schedule(&self, schedule_name: &str) -> Result<bool, Cow<'a, str>> {
         // Can't remove your default schedule.
         if schedule_name == DEFAULT_SCHEDULE_NAME {
-            return false;
+            return Err("You cannot remove the default schedule.".into());
         }
 
         self._process_response(
@@ -1452,22 +1476,51 @@ impl<'a> WebRegWrapper<'a> {
         }
     }
 
-    async fn _process_response(&self, res: Result<Response, Error>) -> bool {
+    async fn _process_response(&self, res: Result<Response, Error>) -> Result<bool, Cow<'a, str>> {
         match res {
-            Err(_) => false,
+            Err(e) => Err(e.to_string().into()),
             Ok(r) => {
                 if !r.status().is_success() {
-                    false
+                    Err(r.status().to_string().into())
                 } else {
                     let text = r.text().await.unwrap_or_else(|_| {
                         json!({
-                            "OPS": "FAIL"
+                            "OPS": "FAIL",
+                            "REASON": ""
                         })
                         .to_string()
                     });
 
                     let json: Value = serde_json::from_str(&text).unwrap();
-                    json["OPS"].is_string() && json["OPS"].as_str().unwrap() == "SUCCESS"
+                    if json["OPS"].is_string() && json["OPS"].as_str().unwrap() == "SUCCESS" {
+                        Ok(true)
+                    } else {
+                        let mut parsed_str = String::new();
+                        let mut is_in_brace = false;
+                        json["REASON"]
+                            .as_str()
+                            .unwrap_or_else(|| "")
+                            .chars()
+                            .for_each(|c| {
+                                if c == '<' {
+                                    is_in_brace = true;
+                                    return;
+                                }
+
+                                if c == '>' {
+                                    is_in_brace = false;
+                                    return;
+                                }
+
+                                if is_in_brace {
+                                    return;
+                                }
+
+                                parsed_str.push(c);
+                            });
+
+                        Err(parsed_str.into())
+                    }
                 }
             }
         }
