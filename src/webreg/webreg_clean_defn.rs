@@ -1,4 +1,4 @@
-use std::cmp::max;
+use std::{borrow::Cow, cmp::max};
 
 use serde::Serialize;
 
@@ -21,19 +21,36 @@ pub struct CourseSection {
     pub waitlist_ct: i64,
     /// All meetings.
     pub meetings: Vec<Meeting>,
+    /// Whether you need to waitlist this.
+    pub needs_waitlist: bool,
+}
+
+impl CourseSection {
+    /// Checks if this section has any seats left.
+    ///
+    /// This function should be used because, sometimes, WebReg will say that
+    /// there are some seats available; however, in reality, no seats are
+    /// available and, usually, there is still a waitlist.
+    ///
+    /// # Returns
+    /// `true` if there are seats and `false` otherwise.
+    fn has_seats(&self) -> bool {
+        self.available_seats > 0 && self.waitlist_ct == 0
+    }
 }
 
 impl ToString for CourseSection {
     fn to_string(&self) -> String {
         let mut s = format!(
-            "[{}] [{} / {}] {}: {}/{} (WL: {})\n",
+            "[{}] [{} / {}] {}: {}/{} (WL: {}) [{}]\n",
             self.subj_course_id,
             self.section_code,
             self.section_id,
             self.instructor,
             self.available_seats,
             self.total_seats,
-            self.waitlist_ct
+            self.waitlist_ct,
+            if self.has_seats() { "E" } else { "W" }
         );
 
         for meeting in &self.meetings {
@@ -157,10 +174,12 @@ pub struct ScheduledSection {
 
 impl ToString for ScheduledSection {
     fn to_string(&self) -> String {
-        let status = match self.enrolled_status {
-            EnrollmentStatus::Enrolled => "Enrolled",
-            EnrollmentStatus::Waitlist(_) => "Waitlisted",
-            EnrollmentStatus::Planned => "Planned",
+        let status: Cow<'_, str> = match self.enrolled_status {
+            EnrollmentStatus::Enrolled => Cow::Borrowed("Enrolled"),
+            EnrollmentStatus::Waitlist(r) => {
+                Cow::Owned(format!("Waitlisted {}/{}", r, self.waitlist_ct))
+            }
+            EnrollmentStatus::Planned => Cow::Borrowed("Planned"),
         };
 
         let mut s = format!(

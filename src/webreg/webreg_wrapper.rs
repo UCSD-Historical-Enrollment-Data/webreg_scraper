@@ -264,6 +264,25 @@ impl<'a> WebRegWrapper<'a> {
                         })
                         .for_each(|meeting| all_meetings.push(meeting));
 
+                    // Look for current waitlist count
+                    let wl_count = match sch_meetings.iter().find(|x| x.count_on_waitlist.is_some())
+                    {
+                        Some(r) => r.count_on_waitlist.unwrap(),
+                        None => 0,
+                    };
+
+                    let pos_on_wl = if sch_meetings[0].enroll_status == "WT" {
+                        match sch_meetings
+                            .iter()
+                            .find(|x| x.waitlist_pos.chars().all(|y| y.is_numeric()))
+                        {
+                            Some(r) => r.waitlist_pos.parse::<i64>().unwrap(),
+                            None => 0,
+                        }
+                    } else {
+                        0
+                    };
+
                     schedule.push(ScheduledSection {
                         section_number: sch_meetings[0].section_number,
                         instructor: sch_meetings[0].person_full_name.trim().to_string(),
@@ -295,11 +314,11 @@ impl<'a> WebRegWrapper<'a> {
                         units: sch_meetings[0].sect_credit_hrs,
                         enrolled_status: match &*sch_meetings[0].enroll_status {
                             "EN" => EnrollmentStatus::Enrolled,
-                            "WT" => EnrollmentStatus::Waitlist(-1),
+                            "WT" => EnrollmentStatus::Waitlist(pos_on_wl),
                             "PL" => EnrollmentStatus::Planned,
                             _ => EnrollmentStatus::Planned,
                         },
-                        waitlist_ct: -1,
+                        waitlist_ct: wl_count,
                         meetings: all_meetings,
                     });
                 }
@@ -443,6 +462,7 @@ impl<'a> WebRegWrapper<'a> {
                             total_seats: x.section_capacity,
                             waitlist_ct: x.count_on_waitlist,
                             meetings: vec![],
+                            needs_waitlist: x.needs_waitlist == "Y",
                         })
                         .collect(),
                 )
@@ -534,6 +554,7 @@ impl<'a> WebRegWrapper<'a> {
                             available_seats: max(webreg_meeting.avail_seat, 0),
                             total_seats: webreg_meeting.section_capacity,
                             waitlist_ct: webreg_meeting.count_on_waitlist,
+                            needs_waitlist: webreg_meeting.needs_waitlist == "Y",
                             meetings: vec![Meeting {
                                 start_hr: webreg_meeting.start_time_hr,
                                 start_min: webreg_meeting.start_time_min,
@@ -678,6 +699,7 @@ impl<'a> WebRegWrapper<'a> {
                             subj_course_id: course_dept_id.clone(),
                             section_id: group.main_meeting[0].section_number.trim().to_string(),
                             section_code: group.main_meeting[0].sect_code.trim().to_string(),
+                            needs_waitlist: group.main_meeting[0].needs_waitlist == "Y",
                             instructor: group.main_meeting[0]
                                 .person_full_name
                                 .split_once(';')
@@ -729,6 +751,7 @@ impl<'a> WebRegWrapper<'a> {
                                 .trim()
                                 .to_string(),
                             available_seats: max(meeting.avail_seat, 0),
+                            needs_waitlist: meeting.needs_waitlist == "Y",
                             total_seats: meeting.section_capacity,
                             waitlist_ct: meeting.count_on_waitlist,
                             meetings: all_meetings,

@@ -137,13 +137,19 @@ pub struct WebRegMeeting {
     /// - `CA`: Canceled.
     #[serde(rename = "FK_SST_SCTN_STATCD")]
     pub display_type: String,
+
+    /// Looks like this flag determines if a section needs to be waitlisted.
+    /// - `Y` if the section needs to be waitlisted.
+    /// - `N` if the section does not need to be waitlisted.
+    #[serde(rename = "STP_ENRLT_FLAG")]
+    pub needs_waitlist: String,
 }
 
 /// A meeting that you have enrolled in.. Note that this doesn't represent a class by itself, but
 /// rather a "piece" of that class. For example, one `ScheduledMeeting` can represent a discussion
 /// while another can represent a lecture. Additionally, each `ScheduledMeeting` can only represent
 /// one meeting per week (so, for example, a MWF lecture would have 3 entries).
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct ScheduledMeeting {
     // TODO can we guarantee that this will always be an int?
     /// Number of units that this class is being taken for (e.g. 4.00)
@@ -177,10 +183,6 @@ pub struct ScheduledMeeting {
     /// The subject code. For example, `CSE` or `MATH` are both possible option.
     #[serde(rename = "SUBJ_CODE")]
     pub subj_code: String,
-
-    /// The waitlist position.
-    #[serde(rename = "WT_POS")]
-    pub waitlist_pos: String,
 
     /// The room code. For example, if the meeting is in CENTR 119, then this would be `119`.
     #[serde(rename = "ROOM_CODE")]
@@ -251,5 +253,10 @@ pub struct ScheduledMeeting {
 
     /// The number of students currently on the waitlist.
     #[serde(rename = "COUNT_ON_WAITLIST")]
-    count_on_waitlist: Option<i64>,
+    pub count_on_waitlist: Option<i64>,
+
+    /// Your waitlist position. This will either be an empty string if there is no waitlist,
+    /// or your waitlist position if you are on the waitlist.
+    #[serde(rename = "WT_POS")]
+    pub waitlist_pos: String,
 }

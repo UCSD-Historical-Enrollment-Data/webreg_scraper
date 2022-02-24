@@ -52,7 +52,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     );
 
     if cfg!(debug_assertions) {
-        test_enroll_unenroll(&w).await;
+        run_basic_tests(&w).await;
     } else {
         run_tracker(w, Some("http://localhost:3000/cookie")).await;
     }
@@ -156,11 +156,27 @@ async fn run_tracker(w: WebRegWrapper<'_>, cookie_url: Option<&str>) {
     println!("[{}] Quitting.", get_pretty_time());
 }
 
+/// Runs very basic tests.
+///
+/// # Parameters
+/// - `w`: The wrapper.
+#[allow(dead_code)]
+async fn run_basic_tests(w: &WebRegWrapper<'_>) {
+    for c in w.get_schedule(None).await.unwrap() {
+        println!("{}", c.to_string());
+    }
+    /*
+    for c in w.get_course_info("CSE", "127").await.unwrap() {
+        println!("{}", c.to_string());
+    } */
+}
+
 /// Attempts to enroll in a random section, and then unenroll after. This prints
 /// the schedule out.
 ///
 /// # Parameters
 /// - `w`: The wrapper.
+#[allow(dead_code)]
 async fn test_enroll_unenroll(w: &WebRegWrapper<'_>) {
     for c in w.get_schedule(None).await.unwrap() {
         println!("{}", c.to_string());
@@ -168,7 +184,10 @@ async fn test_enroll_unenroll(w: &WebRegWrapper<'_>) {
 
     println!("==========================================");
 
-    let course = w.search_courses_detailed(SearchType::BySection("079588")).await.unwrap();
+    let course = w
+        .search_courses_detailed(SearchType::BySection("079588"))
+        .await
+        .unwrap();
     assert_eq!(1, course.len());
     println!(
         "Attempting to enroll in, or waitlist, {} => {}",
