@@ -7,6 +7,7 @@ use crate::webreg::webreg_raw_defn::{ScheduledMeeting, WebRegMeeting, WebRegSear
 use reqwest::header::{COOKIE, USER_AGENT};
 use reqwest::{Client, Error, Response};
 use serde_json::{json, Value};
+use std::borrow::Cow;
 use std::cmp::max;
 use std::collections::{HashMap, HashSet, VecDeque};
 use url::Url;
@@ -94,7 +95,7 @@ impl<'a> WebRegWrapper<'a> {
     ///
     /// # Returns
     /// The name of the person, or an empty string if the cookies that were given were invalid.
-    pub async fn get_account_name(&self) -> String {
+    pub async fn get_account_name(&self) -> Cow<'a, str> {
         let res = self
             .client
             .get(ACC_NAME)
@@ -104,13 +105,13 @@ impl<'a> WebRegWrapper<'a> {
             .await;
 
         match res {
-            Err(_) => "".to_string(),
+            Err(_) => "".into(),
             Ok(r) => {
                 let name = r.text().await.unwrap();
                 if self._internal_is_valid(&name) {
-                    name
+                    name.into()
                 } else {
-                    "".to_string()
+                    "".into()
                 }
             }
         }

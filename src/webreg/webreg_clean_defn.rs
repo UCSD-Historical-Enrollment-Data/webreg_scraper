@@ -122,10 +122,10 @@ impl Meeting {
 
 impl ToString for Meeting {
     fn to_string(&self) -> String {
-        let meeting_days_display = match &self.meeting_days {
-            MeetingDay::Repeated(r) => r.join(""),
-            MeetingDay::OneTime(r) => r.to_string(),
-            MeetingDay::None => "N/A".to_string(),
+        let meeting_days_display: Cow<'_, str> = match &self.meeting_days {
+            MeetingDay::Repeated(r) => r.join("").into(),
+            MeetingDay::OneTime(r) => r.into(),
+            MeetingDay::None => "N/A".into(),
         };
 
         let time_range = format!(
@@ -175,11 +175,11 @@ pub struct ScheduledSection {
 impl ToString for ScheduledSection {
     fn to_string(&self) -> String {
         let status: Cow<'_, str> = match self.enrolled_status {
-            EnrollmentStatus::Enrolled => Cow::Borrowed("Enrolled"),
+            EnrollmentStatus::Enrolled => "Enrolled".into(),
             EnrollmentStatus::Waitlist(r) => {
-                Cow::Owned(format!("Waitlisted {}/{}", r, self.waitlist_ct))
+                format!("Waitlisted {}/{}", r, self.waitlist_ct).into()
             }
-            EnrollmentStatus::Planned => Cow::Borrowed("Planned"),
+            EnrollmentStatus::Planned => "Planned".into(),
         };
 
         let mut s = format!(

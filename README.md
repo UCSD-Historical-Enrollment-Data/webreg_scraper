@@ -270,7 +270,7 @@ w.add_section(
         unit_count: None,
     },
     true
-)await
+).await;
 ```
 
 This will return `true` if you were able to enroll/waitlist in the section and `false` otherwise. Additionally, if you are able to enroll/waitlist in said section, this function will also call an API endpoint which unplans said class from all of your schedules.
@@ -284,7 +284,7 @@ Suppose your enrollment time is here and you decide to drop CSE 95. You can use 
 
 ```rs
 // If this course is on the waitlist, use `false` instead.
-w.drop_section(true, "078483").await
+w.drop_section(true, "078483").await;
 ```
 
 This will return `true` if dropping was successful and `false` otherwise.
