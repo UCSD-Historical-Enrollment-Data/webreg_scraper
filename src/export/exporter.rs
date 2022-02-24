@@ -66,7 +66,7 @@ pub async fn export_all_sections(w: &WebRegWrapper<'_>) {
     let mut writer = BufWriter::new(f);
     writeln!(
         writer,
-        "subj_course_id,sec_code,sec_id,prof,available,waitlist,total,meetings"
+        "subj_course_id,sec_code,sec_id,prof,total_seats,meetings"
     )
     .unwrap();
 
@@ -85,14 +85,12 @@ pub async fn export_all_sections(w: &WebRegWrapper<'_>) {
             .for_each(|c| {
                 writeln!(
                     writer,
-                    "{},{},{},{},{},{},{},{}",
+                    "{},{},{},{},{},{}",
                     c.subj_course_id,
                     c.section_code,
                     c.section_id,
                     // Every instructor name (except staff) has a comma
                     c.instructor.replace(",", ";"),
-                    c.available_seats,
-                    c.waitlist_ct,
                     c.total_seats,
                     c.meetings
                         .into_iter()

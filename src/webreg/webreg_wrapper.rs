@@ -1014,13 +1014,10 @@ impl<'a> WebRegWrapper<'a> {
     /// # Returns
     /// `true` if the email was sent successfully and `false` otherwise.
     pub async fn send_email_to_self(&self, email_content: &str) -> bool {
-        let params: HashMap<&str, &str> =
-            HashMap::from([("actionevent", email_content), ("termcode", self.term)]);
-
         let res = self
             .client
             .post(SEND_EMAIL)
-            .form(&params)
+            .form(&[("actionevent", email_content), ("termcode", self.term)])
             .header(COOKIE, &self.cookies)
             .header(USER_AGENT, MY_USER_AGENT)
             .send()
@@ -1073,7 +1070,7 @@ impl<'a> WebRegWrapper<'a> {
         self._process_response(
             self.client
                 .post(CHANGE_ENROLL)
-                .form(&HashMap::from([
+                .form(&[
                     ("section", &*sec_id),
                     ("subjCode", ""),
                     ("crseCode", ""),
@@ -1083,7 +1080,7 @@ impl<'a> WebRegWrapper<'a> {
                     ("oldGrade", ""),
                     ("oldUnit", ""),
                     ("termcode", self.term),
-                ]))
+                ])
                 .header(COOKIE, &self.cookies)
                 .header(USER_AGENT, MY_USER_AGENT)
                 .send()
@@ -1117,12 +1114,12 @@ impl<'a> WebRegWrapper<'a> {
             self._process_response(
                 self.client
                     .post(PLAN_EDIT)
-                    .form(&HashMap::from([
+                    .form(&[
                         ("section", &*plan_options.section_number),
                         ("subjcode", &*plan_options.subject_code),
                         ("crsecode", &*crsc_code),
                         ("termcode", self.term),
-                    ]))
+                    ])
                     .header(COOKIE, &self.cookies)
                     .header(USER_AGENT, MY_USER_AGENT)
                     .send()
@@ -1134,7 +1131,7 @@ impl<'a> WebRegWrapper<'a> {
         self._process_response(
             self.client
                 .post(PLAN_ADD)
-                .form(&HashMap::from([
+                .form(&[
                     ("subjcode", &*plan_options.subject_code),
                     ("crsecode", &*crsc_code),
                     ("sectnum", &*plan_options.section_number),
@@ -1155,7 +1152,7 @@ impl<'a> WebRegWrapper<'a> {
                             None => DEFAULT_SCHEDULE_NAME,
                         },
                     ),
-                ]))
+                ])
                 .header(COOKIE, &self.cookies)
                 .header(USER_AGENT, MY_USER_AGENT)
                 .send()
@@ -1180,11 +1177,11 @@ impl<'a> WebRegWrapper<'a> {
         self._process_response(
             self.client
                 .post(PLAN_REMOVE)
-                .form(&HashMap::from([
+                .form(&[
                     ("sectnum", section_num),
                     ("termcode", self.term),
                     ("schedname", schedule_name.unwrap_or(DEFAULT_SCHEDULE_NAME)),
-                ]))
+                ])
                 .header(COOKIE, &self.cookies)
                 .header(USER_AGENT, MY_USER_AGENT)
                 .send()
@@ -1228,14 +1225,14 @@ impl<'a> WebRegWrapper<'a> {
                 ._process_response(
                     self.client
                         .post(base_edit_url)
-                        .form(&HashMap::from([
+                        .form(&[
                             // These are required
                             ("section", &*enroll_options.section_number),
                             ("termcode", self.term),
                             // These are optional.
                             ("subjcode", ""),
                             ("crsecode", ""),
-                        ]))
+                        ])
                         .header(COOKIE, &self.cookies)
                         .header(USER_AGENT, MY_USER_AGENT)
                         .send()
@@ -1252,7 +1249,7 @@ impl<'a> WebRegWrapper<'a> {
             ._process_response(
                 self.client
                     .post(base_reg_url)
-                    .form(&HashMap::from([
+                    .form(&[
                         // These are required
                         ("section", &*enroll_options.section_number),
                         ("termcode", self.term),
@@ -1267,7 +1264,7 @@ impl<'a> WebRegWrapper<'a> {
                         ),
                         ("crsecode", ""),
                         ("subjcode", ""),
-                    ]))
+                    ])
                     .header(COOKIE, &self.cookies)
                     .header(USER_AGENT, MY_USER_AGENT)
                     .send()
@@ -1283,10 +1280,10 @@ impl<'a> WebRegWrapper<'a> {
         self._process_response(
             self.client
                 .post(PLAN_REMOVE_ALL)
-                .form(&HashMap::from([
+                .form(&[
                     ("sectnum", &*enroll_options.section_number),
                     ("termcode", self.term),
-                ]))
+                ])
                 .header(COOKIE, &self.cookies)
                 .header(USER_AGENT, MY_USER_AGENT)
                 .send()
@@ -1319,14 +1316,14 @@ impl<'a> WebRegWrapper<'a> {
         self._process_response(
             self.client
                 .post(base_reg_url)
-                .form(&HashMap::from([
+                .form(&[
                     // These parameters are optional
                     ("subjcode", ""),
                     ("crsecode", ""),
                     // But these are required
                     ("section", section_num),
                     ("termcode", self.term),
-                ]))
+                ])
                 .header(COOKIE, &self.cookies)
                 .header(USER_AGENT, MY_USER_AGENT)
                 .send()
@@ -1385,11 +1382,11 @@ impl<'a> WebRegWrapper<'a> {
         self._process_response(
             self.client
                 .post(RENAME_SCHEDULE)
-                .form(&HashMap::from([
+                .form(&[
                     ("termcode", self.term),
                     ("oldschedname", old_name),
                     ("newschedname", new_name),
-                ]))
+                ])
                 .header(COOKIE, &self.cookies)
                 .header(USER_AGENT, MY_USER_AGENT)
                 .send()
@@ -1414,10 +1411,7 @@ impl<'a> WebRegWrapper<'a> {
         self._process_response(
             self.client
                 .post(REMOVE_SCHEDULE)
-                .form(&HashMap::from([
-                    ("termcode", self.term),
-                    ("schedname", schedule_name),
-                ]))
+                .form(&[("termcode", self.term), ("schedname", schedule_name)])
                 .header(COOKIE, &self.cookies)
                 .header(USER_AGENT, MY_USER_AGENT)
                 .send()
