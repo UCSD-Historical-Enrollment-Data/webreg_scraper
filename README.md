@@ -2,9 +2,18 @@
 An API wrapper for UCSD's [WebReg](https://act.ucsd.edu/webreg2/start) course enrollment system.
 
 ## Programming Language
-The main project (API wrapper) uses the latest version of [Rust](https://www.rust-lang.org/). The reason why I chose Rust instead of, say, Python or C#, is because I wanted to learn more about Rust. Plus, I've been meaning to work on a project with Rust.
+The main project (API wrapper) uses the latest version of [Rust](https://www.rust-lang.org/).
+
+<details>
+<summary>More Information</summary>
+<br> 
+
+The reason why I chose Rust instead of, say, Python or C#, is because I wanted to learn more about Rust. Plus, I've been meaning to work on a project with Rust.
 
 There is additionally another project, creatively namd `webregautoin`, which uses Node's [HTTP](https://nodejs.org/api/http.html) library to create a local API server which the wrapper can use. In particular, this local API has one sole purpose: when new cookies are needed to log into WebReg, the wrapper can make a request to the local API. The local API will then use [a headless Chrome browser](https://github.com/puppeteer/puppeteer) to log into WebReg and get the new cookies. Note that you'll need to log into WebReg beforehand so you can select the `Remember me for 7 days` checkbox for the Duo 2FA (this will automatically be done when an initial request is made).
+
+</details>
+
 
 ## Wrapper Features (WIP & Completed)
 Below are some features that this wrapper has, along with what I plan on working on.
@@ -27,11 +36,13 @@ Below are some features that this wrapper has, along with what I plan on working
 - [ ] Adding, or removing, an event from a schedule.
 - [x] Sending a confirmation email to yourself.
 
-## Purpose
-There are a few reasons why I wanted to make this wrapper:
-- Monitor the enrollment count of certain classes (e.g. tracking popularity of certain classes).
-- Automatically enroll in classes when possible (e.g. first/second pass is available).
-- Create possible, conflict-free, schedules.
+## Program Features 
+These are some features that I plan on working on which will use the wrapper features above. 
+
+- [x] Ability to track the enrollment count of certain classes (e.g. tracking popularity of certain classes).
+- [x] Create possible, conflict-free schedules.
+- [ ] Automatically enroll in classes when possible (e.g. first/second pass is available).
+- [ ] Ability to export your WebReg schedule into an `ical` format.
 
 ## Wrapper Usage
 To use the wrapper, you need to create a new instance of it. For example:
@@ -302,4 +313,4 @@ I am not responsible for any damages or other issue(s) caused by any use of this
 Specifically, how fast a lower- or upper-division CSE/COGS/MATH/ECE course fills up in Spring 2022? [Here you go.](https://github.com/ewang2002/UCSDHistEnrollData)
 
 ## License
-All code provided in this repository is licensed under the MIT license. 
+Everything in this repository is licensed under the MIT license.
