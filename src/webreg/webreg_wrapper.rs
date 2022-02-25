@@ -1500,6 +1500,7 @@ impl<'a> WebRegWrapper<'a> {
                         json["REASON"]
                             .as_str()
                             .unwrap_or_else(|| "")
+                            .trim()
                             .chars()
                             .for_each(|c| {
                                 if c == '<' {
