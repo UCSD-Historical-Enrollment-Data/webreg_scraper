@@ -70,15 +70,16 @@ pub async fn track_webreg_enrollment(
                 .get_enrollment_count(r.subj_code.trim(), r.course_code.trim())
                 .await;
             match res {
-                None => {
+                Err(e) => {
                     fail_count += 1;
                     eprintln!(
-                        "[{}] An unknown error occurred. Were you logged out? Skipping. (FAIL_COUNT: {})",
+                        "[{}] An error occurred ({}). Skipping. (FAIL_COUNT: {})",
                         get_pretty_time(),
+                        e,
                         fail_count
                     );
                 }
-                Some(r) if !r.is_empty() => {
+                Ok(r) if !r.is_empty() => {
                     fail_count = 0;
                     println!(
                         "[{}] Processing {} section(s) for {}.",

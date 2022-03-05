@@ -15,7 +15,22 @@ use std::time::{Duration, Instant};
 /// - `w`: The wrapper.
 #[allow(dead_code)]
 pub async fn run_basic_tests(w: &WebRegWrapper<'_>) {
-    test_enroll_unenroll(w, false).await;
+    // Get all schedules
+    match w.get_schedule_list().await {
+        Ok(l) => println!("{:?}", l),
+        Err(e) => eprintln!("{}", e),
+    }
+
+    println!("=========================================");
+    // Random
+    match w.get_course_info("CSE", "11101").await {
+        Ok(s) => s.into_iter().for_each(|ss| println!("{}", ss.to_string())),
+        Err(e) => eprintln!("{}", e),
+    };
+
+    println!("=========================================");
+    // Searching sections
+    section_search_filter(w).await;
 }
 
 /// Attempts to enroll in a random section, and then unenroll after. This prints
@@ -87,28 +102,34 @@ pub async fn test_enroll_unenroll(w: &WebRegWrapper<'_>, test_enroll: bool) {
 #[allow(dead_code)]
 pub async fn section_search_filter(w: &WebRegWrapper<'_>) {
     // Test filtering specific sections from different departments
-    if let Some(r) = w
+    match w
         .search_courses_detailed(SearchType::ByMultipleSections(&[
             "079913", "078616", "075219",
         ]))
         .await
     {
-        for c in r {
-            println!("{}", c.to_string());
+        Ok(r) => {
+            for c in r {
+                println!("{}", c.to_string());
+            }
         }
+        Err(e) => eprintln!("{}", e),
     }
 
     println!("=============================");
     // Test general search
-    if let Some(r) = w
+    match w
         .search_courses_detailed(SearchType::Advanced(
             &SearchRequestBuilder::new().add_course("MATH 154"),
         ))
         .await
     {
-        for c in r {
-            println!("{}", c.to_string());
+        Ok(r) => {
+            for c in r {
+                println!("{}", c.to_string());
+            }
         }
+        Err(e) => eprintln!("{}", e),
     }
 
     println!("=============================");
@@ -236,7 +257,7 @@ pub async fn get_schedules(
                     true,
                 )
                 .await
-                .unwrap_or_else(|_| false);
+                .unwrap_or(false);
                 tokio::time::sleep(Duration::from_secs(1)).await;
                 continue;
             }

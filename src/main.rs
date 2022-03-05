@@ -39,7 +39,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     let w = WebRegWrapper::new(cookie.to_string(), TERM);
     if !w.is_valid().await {
-        println!("Failed to login.");
+        eprintln!("Failed to login.");
         return Ok(());
     }
 

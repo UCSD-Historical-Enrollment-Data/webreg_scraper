@@ -6,11 +6,16 @@ use crate::webreg::webreg_helper;
 use crate::webreg::webreg_raw_defn::{ScheduledMeeting, WebRegMeeting, WebRegSearchResultItem};
 use reqwest::header::{COOKIE, USER_AGENT};
 use reqwest::{Client, Error, Response};
+use serde::de::DeserializeOwned;
 use serde_json::{json, Value};
 use std::borrow::Cow;
 use std::cmp::max;
 use std::collections::{HashMap, HashSet, VecDeque};
 use url::Url;
+
+/// The generic type is the return value. Otherwise, regardless of request type,
+/// we're just returning the error string if there is an error.
+type Output<'a, T> = Result<T, Cow<'a, str>>;
 
 const MY_USER_AGENT: &str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, \
 like Gecko) Chrome/97.0.4692.71 Safari/537.36";
@@ -124,8 +129,13 @@ impl<'a> WebRegWrapper<'a> {
     /// to your main schedule.
     ///
     /// # Returns
-    /// A vector containing the courses that you are enrolled in, or `None` if this isn't possible.
-    pub async fn get_schedule(&self, schedule_name: Option<&str>) -> Option<Vec<ScheduledSection>> {
+    /// A result that can either be one of:
+    /// - A vector of sections that appear in your schedule.
+    /// - Or, the error message.
+    pub async fn get_schedule(
+        &self,
+        schedule_name: Option<&str>,
+    ) -> Output<'a, Vec<ScheduledSection>> {
         let url = Url::parse_with_params(
             CURR_SCHEDULE,
             &[
@@ -138,239 +148,211 @@ impl<'a> WebRegWrapper<'a> {
         .unwrap();
 
         let res = self
-            .client
-            .get(url)
-            .header(COOKIE, &self.cookies)
-            .header(USER_AGENT, MY_USER_AGENT)
-            .send()
-            .await;
+            ._process_get_result::<Vec<ScheduledMeeting>>(
+                self.client
+                    .get(url)
+                    .header(COOKIE, &self.cookies)
+                    .header(USER_AGENT, MY_USER_AGENT)
+                    .send()
+                    .await,
+            )
+            .await?;
 
-        match res {
-            Err(_) => None,
-            Ok(r) => {
-                if !r.status().is_success() {
-                    return None;
-                }
+        if res.is_empty() {
+            return Ok(vec![]);
+        }
 
-                let text = r.text().await.unwrap_or_else(|_| "".to_string());
-                if text.is_empty() {
-                    return None;
-                }
+        let mut base_group_secs: HashMap<&str, Vec<&ScheduledMeeting>> = HashMap::new();
+        let mut special_classes: HashMap<&str, Vec<&ScheduledMeeting>> = HashMap::new();
+        for s_meeting in &res {
+            if s_meeting.enrolled_count == Some(0) && s_meeting.section_capacity == Some(0) {
+                continue;
+            }
 
-                let parsed =
-                    serde_json::from_str::<Vec<ScheduledMeeting>>(&text).unwrap_or_default();
-                if parsed.is_empty() {
-                    return Some(vec![]);
-                }
+            if s_meeting.sect_code.as_bytes()[0].is_ascii_digit() {
+                special_classes
+                    .entry(s_meeting.course_title.trim())
+                    .or_insert_with(Vec::new)
+                    .push(s_meeting);
 
-                let mut base_group_secs: HashMap<&str, Vec<&ScheduledMeeting>> = HashMap::new();
-                let mut special_classes: HashMap<&str, Vec<&ScheduledMeeting>> = HashMap::new();
-                for s_meeting in &parsed {
-                    if s_meeting.enrolled_count == Some(0) && s_meeting.section_capacity == Some(0)
-                    {
-                        continue;
-                    }
+                continue;
+            }
 
-                    if s_meeting.sect_code.as_bytes()[0].is_ascii_digit() {
-                        special_classes
-                            .entry(s_meeting.course_title.trim())
-                            .or_insert_with(Vec::new)
-                            .push(s_meeting);
+            base_group_secs
+                .entry(s_meeting.course_title.trim())
+                .or_insert_with(Vec::new)
+                .push(s_meeting);
+        }
 
-                        continue;
-                    }
+        let mut schedule: Vec<ScheduledSection> = vec![];
 
-                    base_group_secs
-                        .entry(s_meeting.course_title.trim())
-                        .or_insert_with(Vec::new)
-                        .push(s_meeting);
-                }
-
-                let mut schedule: Vec<ScheduledSection> = vec![];
-
-                for (_, sch_meetings) in base_group_secs {
-                    // Literally all just to find the "main" lecture since webreg is inconsistent
-                    // plus some courses may not have a lecture.
-                    let all_main = sch_meetings
+        for (_, sch_meetings) in base_group_secs {
+            // Literally all just to find the "main" lecture since webreg is inconsistent
+            // plus some courses may not have a lecture.
+            let all_main = sch_meetings
+                .iter()
+                .filter(|x| {
+                    x.sect_code.ends_with("00")
+                        && x.special_meeting.replace("TBA", "").trim().is_empty()
+                })
+                .collect::<Vec<_>>();
+            assert!(
+                !all_main.is_empty()
+                    && all_main
                         .iter()
-                        .filter(|x| {
-                            x.sect_code.ends_with("00")
-                                && x.special_meeting.replace("TBA", "").trim().is_empty()
-                        })
-                        .collect::<Vec<_>>();
-                    assert!(
-                        !all_main.is_empty()
-                            && all_main
-                                .iter()
-                                .all(|x| x.meeting_type == all_main[0].meeting_type)
-                    );
+                        .all(|x| x.meeting_type == all_main[0].meeting_type)
+            );
 
-                    let mut all_meetings: Vec<Meeting> = vec![];
-                    for main in all_main {
-                        all_meetings.push(Meeting {
-                            meeting_type: main.meeting_type.to_string(),
-                            meeting_days: if main.day_code.trim().is_empty() {
-                                MeetingDay::None
-                            } else {
-                                MeetingDay::Repeated(webreg_helper::parse_day_code(
-                                    main.day_code.trim(),
-                                ))
-                            },
-                            start_min: main.start_time_min,
-                            start_hr: main.start_time_hr,
-                            end_min: main.end_time_min,
-                            end_hr: main.end_time_hr,
-                            building: main.bldg_code.trim().to_string(),
-                            room: main.room_code.trim().to_string(),
-                        });
-                    }
-
-                    // TODO calculate waitlist somehow
-                    // Calculate the remaining meetings. other_special consists of midterms and
-                    // final exams, for example, since they are all shared in the same overall
-                    // section (e.g. A02 & A03 are in A00)
-                    sch_meetings
-                        .iter()
-                        .filter(|x| {
-                            x.sect_code.ends_with("00")
-                                && !x.special_meeting.replace("TBA", "").trim().is_empty()
-                        })
-                        .map(|x| Meeting {
-                            meeting_type: x.meeting_type.to_string(),
-                            meeting_days: MeetingDay::OneTime(x.start_date.to_string()),
-                            start_min: x.start_time_min,
-                            start_hr: x.start_time_hr,
-                            end_min: x.end_time_min,
-                            end_hr: x.end_time_hr,
-                            building: x.bldg_code.trim().to_string(),
-                            room: x.room_code.trim().to_string(),
-                        })
-                        .for_each(|meeting| all_meetings.push(meeting));
-
-                    // Other meetings
-                    sch_meetings
-                        .iter()
-                        .filter(|x| !x.sect_code.ends_with("00"))
-                        .map(|x| Meeting {
-                            meeting_type: x.meeting_type.to_string(),
-                            meeting_days: MeetingDay::Repeated(webreg_helper::parse_day_code(
-                                &x.day_code,
-                            )),
-                            start_min: x.start_time_min,
-                            start_hr: x.start_time_hr,
-                            end_min: x.end_time_min,
-                            end_hr: x.end_time_hr,
-                            building: x.bldg_code.trim().to_string(),
-                            room: x.room_code.trim().to_string(),
-                        })
-                        .for_each(|meeting| all_meetings.push(meeting));
-
-                    // Look for current waitlist count
-                    let wl_count = match sch_meetings.iter().find(|x| x.count_on_waitlist.is_some())
-                    {
-                        Some(r) => r.count_on_waitlist.unwrap(),
-                        None => 0,
-                    };
-
-                    let pos_on_wl = if sch_meetings[0].enroll_status == "WT" {
-                        match sch_meetings
-                            .iter()
-                            .find(|x| x.waitlist_pos.chars().all(|y| y.is_numeric()))
-                        {
-                            Some(r) => r.waitlist_pos.parse::<i64>().unwrap(),
-                            None => 0,
-                        }
-                    } else {
-                        0
-                    };
-
-                    schedule.push(ScheduledSection {
-                        section_number: sch_meetings[0].section_number,
-                        instructor: sch_meetings[0].person_full_name.trim().to_string(),
-                        subject_code: sch_meetings[0].subj_code.trim().to_string(),
-                        course_code: sch_meetings[0].course_code.trim().to_string(),
-                        course_title: sch_meetings[0].course_title.trim().to_string(),
-                        section_code: match sch_meetings
-                            .iter()
-                            .find(|x| !x.sect_code.ends_with("00"))
-                        {
-                            Some(r) => r.sect_code.to_string(),
-                            None => sch_meetings[0].sect_code.to_string(),
-                        },
-                        section_capacity: match sch_meetings
-                            .iter()
-                            .find(|x| x.section_capacity.is_some())
-                        {
-                            Some(r) => r.section_capacity.unwrap(),
-                            None => -1,
-                        },
-                        enrolled_count: match sch_meetings
-                            .iter()
-                            .find(|x| x.enrolled_count.is_some())
-                        {
-                            Some(r) => r.enrolled_count.unwrap(),
-                            None => -1,
-                        },
-                        grade_option: sch_meetings[0].grade_option.trim().to_string(),
-                        units: sch_meetings[0].sect_credit_hrs,
-                        enrolled_status: match &*sch_meetings[0].enroll_status {
-                            "EN" => EnrollmentStatus::Enrolled,
-                            "WT" => EnrollmentStatus::Waitlist(pos_on_wl),
-                            "PL" => EnrollmentStatus::Planned,
-                            _ => EnrollmentStatus::Planned,
-                        },
-                        waitlist_ct: wl_count,
-                        meetings: all_meetings,
-                    });
-                }
-
-                for (_, sch_meetings) in special_classes {
-                    let day_code = sch_meetings
-                        .iter()
-                        .map(|x| x.day_code.trim())
-                        .collect::<Vec<_>>()
-                        .join("");
-
-                    let parsed_day_code = if day_code.is_empty() {
+            let mut all_meetings: Vec<Meeting> = vec![];
+            for main in all_main {
+                all_meetings.push(Meeting {
+                    meeting_type: main.meeting_type.to_string(),
+                    meeting_days: if main.day_code.trim().is_empty() {
                         MeetingDay::None
                     } else {
-                        MeetingDay::Repeated(webreg_helper::parse_day_code(&day_code))
-                    };
-
-                    schedule.push(ScheduledSection {
-                        section_number: sch_meetings[0].section_number,
-                        instructor: sch_meetings[0].person_full_name.trim().to_string(),
-                        subject_code: sch_meetings[0].subj_code.trim().to_string(),
-                        course_code: sch_meetings[0].course_code.trim().to_string(),
-                        course_title: sch_meetings[0].course_title.trim().to_string(),
-                        section_code: sch_meetings[0].sect_code.to_string(),
-                        section_capacity: sch_meetings[0].section_capacity.unwrap_or(-1),
-                        enrolled_count: sch_meetings[0].enrolled_count.unwrap_or(-1),
-                        grade_option: sch_meetings[0].grade_option.trim().to_string(),
-                        units: sch_meetings[0].sect_credit_hrs,
-                        enrolled_status: match &*sch_meetings[0].enroll_status {
-                            "EN" => EnrollmentStatus::Enrolled,
-                            "WT" => EnrollmentStatus::Waitlist(-1),
-                            "PL" => EnrollmentStatus::Planned,
-                            _ => EnrollmentStatus::Planned,
-                        },
-                        waitlist_ct: -1,
-                        meetings: vec![Meeting {
-                            meeting_type: sch_meetings[0].meeting_type.to_string(),
-                            meeting_days: parsed_day_code,
-                            start_min: sch_meetings[0].start_time_min,
-                            start_hr: sch_meetings[0].start_time_hr,
-                            end_min: sch_meetings[0].end_time_min,
-                            end_hr: sch_meetings[0].start_time_hr,
-                            building: sch_meetings[0].bldg_code.trim().to_string(),
-                            room: sch_meetings[0].room_code.trim().to_string(),
-                        }],
-                    });
-                }
-
-                Some(schedule)
+                        MeetingDay::Repeated(webreg_helper::parse_day_code(main.day_code.trim()))
+                    },
+                    start_min: main.start_time_min,
+                    start_hr: main.start_time_hr,
+                    end_min: main.end_time_min,
+                    end_hr: main.end_time_hr,
+                    building: main.bldg_code.trim().to_string(),
+                    room: main.room_code.trim().to_string(),
+                });
             }
+
+            // TODO calculate waitlist somehow
+            // Calculate the remaining meetings. other_special consists of midterms and
+            // final exams, for example, since they are all shared in the same overall
+            // section (e.g. A02 & A03 are in A00)
+            sch_meetings
+                .iter()
+                .filter(|x| {
+                    x.sect_code.ends_with("00")
+                        && !x.special_meeting.replace("TBA", "").trim().is_empty()
+                })
+                .map(|x| Meeting {
+                    meeting_type: x.meeting_type.to_string(),
+                    meeting_days: MeetingDay::OneTime(x.start_date.to_string()),
+                    start_min: x.start_time_min,
+                    start_hr: x.start_time_hr,
+                    end_min: x.end_time_min,
+                    end_hr: x.end_time_hr,
+                    building: x.bldg_code.trim().to_string(),
+                    room: x.room_code.trim().to_string(),
+                })
+                .for_each(|meeting| all_meetings.push(meeting));
+
+            // Other meetings
+            sch_meetings
+                .iter()
+                .filter(|x| !x.sect_code.ends_with("00"))
+                .map(|x| Meeting {
+                    meeting_type: x.meeting_type.to_string(),
+                    meeting_days: MeetingDay::Repeated(webreg_helper::parse_day_code(&x.day_code)),
+                    start_min: x.start_time_min,
+                    start_hr: x.start_time_hr,
+                    end_min: x.end_time_min,
+                    end_hr: x.end_time_hr,
+                    building: x.bldg_code.trim().to_string(),
+                    room: x.room_code.trim().to_string(),
+                })
+                .for_each(|meeting| all_meetings.push(meeting));
+
+            // Look for current waitlist count
+            let wl_count = match sch_meetings.iter().find(|x| x.count_on_waitlist.is_some()) {
+                Some(r) => r.count_on_waitlist.unwrap(),
+                None => 0,
+            };
+
+            let pos_on_wl = if sch_meetings[0].enroll_status == "WT" {
+                match sch_meetings
+                    .iter()
+                    .find(|x| x.waitlist_pos.chars().all(|y| y.is_numeric()))
+                {
+                    Some(r) => r.waitlist_pos.parse::<i64>().unwrap(),
+                    None => 0,
+                }
+            } else {
+                0
+            };
+
+            schedule.push(ScheduledSection {
+                section_number: sch_meetings[0].section_number,
+                instructor: sch_meetings[0].person_full_name.trim().to_string(),
+                subject_code: sch_meetings[0].subj_code.trim().to_string(),
+                course_code: sch_meetings[0].course_code.trim().to_string(),
+                course_title: sch_meetings[0].course_title.trim().to_string(),
+                section_code: match sch_meetings.iter().find(|x| !x.sect_code.ends_with("00")) {
+                    Some(r) => r.sect_code.to_string(),
+                    None => sch_meetings[0].sect_code.to_string(),
+                },
+                section_capacity: match sch_meetings.iter().find(|x| x.section_capacity.is_some()) {
+                    Some(r) => r.section_capacity.unwrap(),
+                    None => -1,
+                },
+                enrolled_count: match sch_meetings.iter().find(|x| x.enrolled_count.is_some()) {
+                    Some(r) => r.enrolled_count.unwrap(),
+                    None => -1,
+                },
+                grade_option: sch_meetings[0].grade_option.trim().to_string(),
+                units: sch_meetings[0].sect_credit_hrs,
+                enrolled_status: match &*sch_meetings[0].enroll_status {
+                    "EN" => EnrollmentStatus::Enrolled,
+                    "WT" => EnrollmentStatus::Waitlist(pos_on_wl),
+                    "PL" => EnrollmentStatus::Planned,
+                    _ => EnrollmentStatus::Planned,
+                },
+                waitlist_ct: wl_count,
+                meetings: all_meetings,
+            });
         }
+
+        for (_, sch_meetings) in special_classes {
+            let day_code = sch_meetings
+                .iter()
+                .map(|x| x.day_code.trim())
+                .collect::<Vec<_>>()
+                .join("");
+
+            let parsed_day_code = if day_code.is_empty() {
+                MeetingDay::None
+            } else {
+                MeetingDay::Repeated(webreg_helper::parse_day_code(&day_code))
+            };
+
+            schedule.push(ScheduledSection {
+                section_number: sch_meetings[0].section_number,
+                instructor: sch_meetings[0].person_full_name.trim().to_string(),
+                subject_code: sch_meetings[0].subj_code.trim().to_string(),
+                course_code: sch_meetings[0].course_code.trim().to_string(),
+                course_title: sch_meetings[0].course_title.trim().to_string(),
+                section_code: sch_meetings[0].sect_code.to_string(),
+                section_capacity: sch_meetings[0].section_capacity.unwrap_or(-1),
+                enrolled_count: sch_meetings[0].enrolled_count.unwrap_or(-1),
+                grade_option: sch_meetings[0].grade_option.trim().to_string(),
+                units: sch_meetings[0].sect_credit_hrs,
+                enrolled_status: match &*sch_meetings[0].enroll_status {
+                    "EN" => EnrollmentStatus::Enrolled,
+                    "WT" => EnrollmentStatus::Waitlist(-1),
+                    "PL" => EnrollmentStatus::Planned,
+                    _ => EnrollmentStatus::Planned,
+                },
+                waitlist_ct: -1,
+                meetings: vec![Meeting {
+                    meeting_type: sch_meetings[0].meeting_type.to_string(),
+                    meeting_days: parsed_day_code,
+                    start_min: sch_meetings[0].start_time_min,
+                    start_hr: sch_meetings[0].start_time_hr,
+                    end_min: sch_meetings[0].end_time_min,
+                    end_hr: sch_meetings[0].start_time_hr,
+                    building: sch_meetings[0].bldg_code.trim().to_string(),
+                    room: sch_meetings[0].room_code.trim().to_string(),
+                }],
+            });
+        }
+
+        Ok(schedule)
     }
 
     /// Gets enrollment count for a particular course.
@@ -388,14 +370,14 @@ impl<'a> WebRegWrapper<'a> {
     /// would put `100B`.
     ///
     /// # Returns
-    /// An option containing either:
+    /// A result containing either:
     /// - A vector with all possible sections that match the given subject code & course code.
-    /// - Or nothing.
+    /// - Or the error that occurred.
     pub async fn get_enrollment_count(
         &self,
         subject_code: &str,
         course_code: &str,
-    ) -> Option<Vec<CourseSection>> {
+    ) -> Output<'a, Vec<CourseSection>> {
         let crsc_code = self._get_formatted_course_code(course_code);
         let url = Url::parse_with_params(
             COURSE_DATA,
@@ -407,68 +389,49 @@ impl<'a> WebRegWrapper<'a> {
         )
         .unwrap();
 
-        let res = self
-            .client
-            .get(url)
-            .header(COOKIE, &self.cookies)
-            .header(USER_AGENT, MY_USER_AGENT)
-            .send()
-            .await;
+        let meetings = self
+            ._process_get_result::<Vec<WebRegMeeting>>(
+                self.client
+                    .get(url)
+                    .header(COOKIE, &self.cookies)
+                    .header(USER_AGENT, MY_USER_AGENT)
+                    .send()
+                    .await,
+            )
+            .await?;
 
-        match res {
-            Err(_) => None,
-            Ok(r) => {
-                if !r.status().is_success() {
-                    return None;
-                }
-
-                let text = r.text().await.unwrap_or_else(|_| "".to_string());
-                if text.is_empty() {
-                    return None;
-                }
-
-                let meetings =
-                    serde_json::from_str::<Vec<WebRegMeeting>>(&text).unwrap_or_default();
-                let mut meetings_to_parse = vec![];
-                let mut seen: HashSet<&str> = HashSet::new();
-                for meeting in &meetings {
-                    if !seen.insert(&*meeting.sect_code) {
-                        continue;
-                    }
-
-                    meetings_to_parse.push(meeting);
-                }
-
-                Some(
-                    meetings_to_parse
-                        .into_iter()
-                        .filter(|x| x.display_type == "AC")
-                        .map(|x| CourseSection {
-                            subj_course_id: format!(
-                                "{} {}",
-                                subject_code.trim(),
-                                course_code.trim()
-                            )
-                            .to_uppercase(),
-                            section_id: x.section_number.trim().to_string(),
-                            section_code: x.sect_code.trim().to_string(),
-                            instructor: x
-                                .person_full_name
-                                .split_once(';')
-                                .unwrap()
-                                .0
-                                .trim()
-                                .to_string(),
-                            available_seats: max(x.avail_seat, 0),
-                            total_seats: x.section_capacity,
-                            waitlist_ct: x.count_on_waitlist,
-                            meetings: vec![],
-                            needs_waitlist: x.needs_waitlist == "Y",
-                        })
-                        .collect(),
-                )
+        let mut meetings_to_parse = vec![];
+        let mut seen: HashSet<&str> = HashSet::new();
+        for meeting in &meetings {
+            if !seen.insert(&*meeting.sect_code) {
+                continue;
             }
+
+            meetings_to_parse.push(meeting);
         }
+
+        Ok(meetings_to_parse
+            .into_iter()
+            .filter(|x| x.display_type == "AC")
+            .map(|x| CourseSection {
+                subj_course_id: format!("{} {}", subject_code.trim(), course_code.trim())
+                    .to_uppercase(),
+                section_id: x.section_number.trim().to_string(),
+                section_code: x.sect_code.trim().to_string(),
+                instructor: x
+                    .person_full_name
+                    .split_once(';')
+                    .unwrap()
+                    .0
+                    .trim()
+                    .to_string(),
+                available_seats: max(x.avail_seat, 0),
+                total_seats: x.section_capacity,
+                waitlist_ct: x.count_on_waitlist,
+                meetings: vec![],
+                needs_waitlist: x.needs_waitlist == "Y",
+            })
+            .collect())
     }
 
     /// Gets course information for a particular course.
@@ -485,14 +448,14 @@ impl<'a> WebRegWrapper<'a> {
     /// would put `100B`.
     ///
     /// # Returns
-    /// An option containing either:
+    /// A result containing either:
     /// - A vector with all possible sections that match the given subject code & course code.
-    /// - Or nothing.
+    /// - Or the error that occurred.
     pub async fn get_course_info(
         &self,
         subject_code: &str,
         course_code: &str,
-    ) -> Option<Vec<CourseSection>> {
+    ) -> Output<'a, Vec<CourseSection>> {
         let crsc_code = self._get_formatted_course_code(course_code);
         let url = Url::parse_with_params(
             COURSE_DATA,
@@ -504,265 +467,250 @@ impl<'a> WebRegWrapper<'a> {
         )
         .unwrap();
 
-        let res = self
-            .client
-            .get(url)
-            .header(COOKIE, &self.cookies)
-            .header(USER_AGENT, MY_USER_AGENT)
-            .send()
-            .await;
+        let parsed = self
+            ._process_get_result::<Vec<WebRegMeeting>>(
+                self.client
+                    .get(url)
+                    .header(COOKIE, &self.cookies)
+                    .header(USER_AGENT, MY_USER_AGENT)
+                    .send()
+                    .await,
+            )
+            .await?;
 
-        match res {
-            Err(_) => None,
-            Ok(r) => {
-                if !r.status().is_success() {
-                    return None;
-                }
+        let course_dept_id =
+            format!("{} {}", subject_code.trim(), course_code.trim()).to_uppercase();
 
-                let text = r.text().await.unwrap_or_else(|_| "".to_string());
-                if text.is_empty() {
-                    return None;
-                }
+        // Process any "special" sections
+        let mut sections: Vec<CourseSection> = vec![];
+        let mut unprocessed_sections: Vec<WebRegMeeting> = vec![];
+        for webreg_meeting in parsed {
+            if !webreg_helper::is_valid_meeting(&webreg_meeting) {
+                continue;
+            }
 
-                let course_dept_id =
-                    format!("{} {}", subject_code.trim(), course_code.trim()).to_uppercase();
-                let parsed: Vec<WebRegMeeting> = serde_json::from_str(&text).unwrap_or_default();
+            // If section code starts with a number then it's probably a special section.
+            if webreg_meeting.sect_code.as_bytes()[0].is_ascii_digit() {
+                let m = webreg_helper::parse_meeting_type_date(&webreg_meeting);
 
-                // Process any "special" sections
-                let mut sections: Vec<CourseSection> = vec![];
-                let mut unprocessed_sections: Vec<WebRegMeeting> = vec![];
-                for webreg_meeting in parsed {
-                    if !webreg_helper::is_valid_meeting(&webreg_meeting) {
-                        continue;
+                sections.push(CourseSection {
+                    subj_course_id: course_dept_id.clone(),
+                    section_id: webreg_meeting.section_number.trim().to_string(),
+                    section_code: webreg_meeting.sect_code.trim().to_string(),
+                    instructor: webreg_meeting
+                        .person_full_name
+                        .split_once(';')
+                        .unwrap()
+                        .0
+                        .trim()
+                        .to_string(),
+                    // Because it turns out that you can have negative available seats.
+                    available_seats: max(webreg_meeting.avail_seat, 0),
+                    total_seats: webreg_meeting.section_capacity,
+                    waitlist_ct: webreg_meeting.count_on_waitlist,
+                    needs_waitlist: webreg_meeting.needs_waitlist == "Y",
+                    meetings: vec![Meeting {
+                        start_hr: webreg_meeting.start_time_hr,
+                        start_min: webreg_meeting.start_time_min,
+                        end_hr: webreg_meeting.end_time_hr,
+                        end_min: webreg_meeting.end_time_min,
+                        meeting_type: m.0.to_string(),
+                        meeting_days: m.1,
+                        building: webreg_meeting.bldg_code.trim().to_string(),
+                        room: webreg_meeting.room_code.trim().to_string(),
+                    }],
+                });
+
+                continue;
+            }
+
+            // If the component cannot be enrolled in,
+            // AND the section code doesn't end with '00'
+            // Then it's useless for us
+            if webreg_meeting.display_type != "AC" && !webreg_meeting.sect_code.ends_with("00") {
+                continue;
+            }
+
+            unprocessed_sections.push(webreg_meeting);
+        }
+
+        if unprocessed_sections.is_empty() {
+            return Ok(sections);
+        }
+
+        // Process remaining sections
+        let mut all_groups: Vec<GroupedSection<WebRegMeeting>> = vec![];
+        let mut sec_main_ids = unprocessed_sections
+            .iter()
+            .filter(|x| x.sect_code.ends_with("00"))
+            .map(|x| &*x.sect_code)
+            .collect::<VecDeque<_>>();
+
+        let mut seen: HashSet<&str> = HashSet::new();
+        while !sec_main_ids.is_empty() {
+            let main_id = sec_main_ids.pop_front().unwrap();
+            if seen.contains(main_id) {
+                continue;
+            }
+
+            seen.insert(main_id);
+            let letter = main_id.chars().into_iter().next().unwrap();
+            let mut group = GroupedSection {
+                main_meeting: vec![],
+                child_meetings: vec![],
+                other_special_meetings: vec![],
+            };
+
+            unprocessed_sections
+                .iter()
+                .filter(|x| {
+                    x.sect_code == main_id && x.special_meeting.replace("TBA", "").trim().is_empty()
+                })
+                .for_each(|x| group.main_meeting.push(x));
+
+            assert!(!group.main_meeting.is_empty());
+
+            // Want all sections with section code starting with the same letter as what
+            // the main section code is. So, if main_id is A00, we want all sections that
+            // have section code starting with A.
+            unprocessed_sections
+                .iter()
+                .filter(|x| x.sect_code.starts_with(letter))
+                .for_each(|x| {
+                    // Don't count this again
+                    let special_meeting = x.special_meeting.replace("TBA", "");
+                    if x.sect_code == main_id && special_meeting.trim().is_empty() {
+                        return;
                     }
 
-                    // If section code starts with a number then it's probably a special section.
-                    if webreg_meeting.sect_code.as_bytes()[0].is_ascii_digit() {
-                        let m = webreg_helper::parse_meeting_type_date(&webreg_meeting);
-
-                        sections.push(CourseSection {
-                            subj_course_id: course_dept_id.clone(),
-                            section_id: webreg_meeting.section_number.trim().to_string(),
-                            section_code: webreg_meeting.sect_code.trim().to_string(),
-                            instructor: webreg_meeting
-                                .person_full_name
-                                .split_once(';')
-                                .unwrap()
-                                .0
-                                .trim()
-                                .to_string(),
-                            // Because it turns out that you can have negative available seats.
-                            available_seats: max(webreg_meeting.avail_seat, 0),
-                            total_seats: webreg_meeting.section_capacity,
-                            waitlist_ct: webreg_meeting.count_on_waitlist,
-                            needs_waitlist: webreg_meeting.needs_waitlist == "Y",
-                            meetings: vec![Meeting {
-                                start_hr: webreg_meeting.start_time_hr,
-                                start_min: webreg_meeting.start_time_min,
-                                end_hr: webreg_meeting.end_time_hr,
-                                end_min: webreg_meeting.end_time_min,
-                                meeting_type: m.0.to_string(),
-                                meeting_days: m.1,
-                                building: webreg_meeting.bldg_code.trim().to_string(),
-                                room: webreg_meeting.room_code.trim().to_string(),
-                            }],
-                        });
-
-                        continue;
+                    // Probably a discussion
+                    // Original if-condition:
+                    // (x.start_date == x.section_start_date && special_meeting.trim().is_empty())
+                    if x.sect_code != main_id {
+                        group.child_meetings.push(x);
+                        return;
                     }
 
-                    // If the component cannot be enrolled in,
-                    // AND the section code doesn't end with '00'
-                    // Then it's useless for us
-                    if webreg_meeting.display_type != "AC"
-                        && !webreg_meeting.sect_code.ends_with("00")
-                    {
-                        continue;
+                    group.other_special_meetings.push(x);
+                });
+
+            all_groups.push(group);
+        }
+
+        // Process each group
+        for group in all_groups {
+            let mut main_meetings: Vec<Meeting> = vec![];
+            for meeting in &group.main_meeting {
+                let (m_m_type, m_days) = webreg_helper::parse_meeting_type_date(meeting);
+
+                main_meetings.push(Meeting {
+                    meeting_type: m_m_type.to_string(),
+                    meeting_days: m_days,
+                    building: meeting.bldg_code.trim().to_string(),
+                    room: meeting.room_code.trim().to_string(),
+                    start_hr: meeting.start_time_hr,
+                    start_min: meeting.start_time_min,
+                    end_hr: meeting.end_time_hr,
+                    end_min: meeting.end_time_min,
+                });
+            }
+
+            let other_meetings = group
+                .other_special_meetings
+                .into_iter()
+                .map(|x| {
+                    let (o_m_type, o_days) = webreg_helper::parse_meeting_type_date(x);
+
+                    Meeting {
+                        meeting_type: o_m_type.to_string(),
+                        meeting_days: o_days,
+                        building: x.bldg_code.trim().to_string(),
+                        room: x.room_code.trim().to_string(),
+                        start_hr: x.start_time_hr,
+                        start_min: x.start_time_min,
+                        end_hr: x.end_time_hr,
+                        end_min: x.end_time_min,
                     }
+                })
+                .collect::<Vec<_>>();
 
-                    unprocessed_sections.push(webreg_meeting);
-                }
-
-                if unprocessed_sections.is_empty() {
-                    return Some(sections);
-                }
-
-                // Process remaining sections
-                let mut all_groups: Vec<GroupedSection<WebRegMeeting>> = vec![];
-                let mut sec_main_ids = unprocessed_sections
+            // It's possible that there are no discussions, just a lecture
+            if group.child_meetings.is_empty() {
+                let mut all_meetings: Vec<Meeting> = vec![];
+                main_meetings
                     .iter()
-                    .filter(|x| x.sect_code.ends_with("00"))
-                    .map(|x| &*x.sect_code)
-                    .collect::<VecDeque<_>>();
+                    .for_each(|m| all_meetings.push(m.clone()));
 
-                let mut seen: HashSet<&str> = HashSet::new();
-                while !sec_main_ids.is_empty() {
-                    let main_id = sec_main_ids.pop_front().unwrap();
-                    if seen.contains(main_id) {
-                        continue;
-                    }
+                other_meetings
+                    .iter()
+                    .for_each(|x| all_meetings.push(x.clone()));
 
-                    seen.insert(main_id);
-                    let letter = main_id.chars().into_iter().next().unwrap();
-                    let mut group = GroupedSection {
-                        main_meeting: vec![],
-                        child_meetings: vec![],
-                        other_special_meetings: vec![],
-                    };
+                // Just lecture = enrollment stats will be reflected properly on this meeting.
+                sections.push(CourseSection {
+                    subj_course_id: course_dept_id.clone(),
+                    section_id: group.main_meeting[0].section_number.trim().to_string(),
+                    section_code: group.main_meeting[0].sect_code.trim().to_string(),
+                    needs_waitlist: group.main_meeting[0].needs_waitlist == "Y",
+                    instructor: group.main_meeting[0]
+                        .person_full_name
+                        .split_once(';')
+                        .unwrap()
+                        .0
+                        .trim()
+                        .to_string(),
+                    available_seats: max(group.main_meeting[0].avail_seat, 0),
+                    total_seats: group.main_meeting[0].section_capacity,
+                    waitlist_ct: group.main_meeting[0].count_on_waitlist,
+                    meetings: all_meetings,
+                });
 
-                    unprocessed_sections
-                        .iter()
-                        .filter(|x| {
-                            x.sect_code == main_id
-                                && x.special_meeting.replace("TBA", "").trim().is_empty()
-                        })
-                        .for_each(|x| group.main_meeting.push(x));
+                continue;
+            }
 
-                    assert!(!group.main_meeting.is_empty());
+            // Hopefully these are discussions
+            for meeting in group.child_meetings {
+                let (m_type, t_m_dats) = webreg_helper::parse_meeting_type_date(meeting);
 
-                    // Want all sections with section code starting with the same letter as what
-                    // the main section code is. So, if main_id is A00, we want all sections that
-                    // have section code starting with A.
-                    unprocessed_sections
-                        .iter()
-                        .filter(|x| x.sect_code.starts_with(letter))
-                        .for_each(|x| {
-                            // Don't count this again
-                            let special_meeting = x.special_meeting.replace("TBA", "");
-                            if x.sect_code == main_id && special_meeting.trim().is_empty() {
-                                return;
-                            }
+                let mut all_meetings: Vec<Meeting> = vec![];
+                main_meetings
+                    .iter()
+                    .for_each(|m| all_meetings.push(m.clone()));
+                all_meetings.push(Meeting {
+                    meeting_type: m_type.to_string(),
+                    meeting_days: t_m_dats,
+                    start_min: meeting.start_time_min,
+                    start_hr: meeting.start_time_hr,
+                    end_min: meeting.end_time_min,
+                    end_hr: meeting.end_time_hr,
+                    building: meeting.bldg_code.trim().to_string(),
+                    room: meeting.room_code.trim().to_string(),
+                });
 
-                            // Probably a discussion
-                            // Original if-condition:
-                            // (x.start_date == x.section_start_date && special_meeting.trim().is_empty())
-                            if x.sect_code != main_id {
-                                group.child_meetings.push(x);
-                                return;
-                            }
+                other_meetings
+                    .iter()
+                    .for_each(|x| all_meetings.push(x.clone()));
 
-                            group.other_special_meetings.push(x);
-                        });
-
-                    all_groups.push(group);
-                }
-
-                // Process each group
-                for group in all_groups {
-                    let mut main_meetings: Vec<Meeting> = vec![];
-                    for meeting in &group.main_meeting {
-                        let (m_m_type, m_days) = webreg_helper::parse_meeting_type_date(meeting);
-
-                        main_meetings.push(Meeting {
-                            meeting_type: m_m_type.to_string(),
-                            meeting_days: m_days,
-                            building: meeting.bldg_code.trim().to_string(),
-                            room: meeting.room_code.trim().to_string(),
-                            start_hr: meeting.start_time_hr,
-                            start_min: meeting.start_time_min,
-                            end_hr: meeting.end_time_hr,
-                            end_min: meeting.end_time_min,
-                        });
-                    }
-
-                    let other_meetings = group
-                        .other_special_meetings
-                        .into_iter()
-                        .map(|x| {
-                            let (o_m_type, o_days) = webreg_helper::parse_meeting_type_date(x);
-
-                            Meeting {
-                                meeting_type: o_m_type.to_string(),
-                                meeting_days: o_days,
-                                building: x.bldg_code.trim().to_string(),
-                                room: x.room_code.trim().to_string(),
-                                start_hr: x.start_time_hr,
-                                start_min: x.start_time_min,
-                                end_hr: x.end_time_hr,
-                                end_min: x.end_time_min,
-                            }
-                        })
-                        .collect::<Vec<_>>();
-
-                    // It's possible that there are no discussions, just a lecture
-                    if group.child_meetings.is_empty() {
-                        let mut all_meetings: Vec<Meeting> = vec![];
-                        main_meetings
-                            .iter()
-                            .for_each(|m| all_meetings.push(m.clone()));
-
-                        other_meetings
-                            .iter()
-                            .for_each(|x| all_meetings.push(x.clone()));
-
-                        // Just lecture = enrollment stats will be reflected properly on this meeting.
-                        sections.push(CourseSection {
-                            subj_course_id: course_dept_id.clone(),
-                            section_id: group.main_meeting[0].section_number.trim().to_string(),
-                            section_code: group.main_meeting[0].sect_code.trim().to_string(),
-                            needs_waitlist: group.main_meeting[0].needs_waitlist == "Y",
-                            instructor: group.main_meeting[0]
-                                .person_full_name
-                                .split_once(';')
-                                .unwrap()
-                                .0
-                                .trim()
-                                .to_string(),
-                            available_seats: max(group.main_meeting[0].avail_seat, 0),
-                            total_seats: group.main_meeting[0].section_capacity,
-                            waitlist_ct: group.main_meeting[0].count_on_waitlist,
-                            meetings: all_meetings,
-                        });
-
-                        continue;
-                    }
-
-                    // Hopefully these are discussions
-                    for meeting in group.child_meetings {
-                        let (m_type, t_m_dats) = webreg_helper::parse_meeting_type_date(meeting);
-
-                        let mut all_meetings: Vec<Meeting> = vec![];
-                        main_meetings
-                            .iter()
-                            .for_each(|m| all_meetings.push(m.clone()));
-                        all_meetings.push(Meeting {
-                            meeting_type: m_type.to_string(),
-                            meeting_days: t_m_dats,
-                            start_min: meeting.start_time_min,
-                            start_hr: meeting.start_time_hr,
-                            end_min: meeting.end_time_min,
-                            end_hr: meeting.end_time_hr,
-                            building: meeting.bldg_code.trim().to_string(),
-                            room: meeting.room_code.trim().to_string(),
-                        });
-
-                        other_meetings
-                            .iter()
-                            .for_each(|x| all_meetings.push(x.clone()));
-
-                        sections.push(CourseSection {
-                            subj_course_id: course_dept_id.clone(),
-                            section_id: meeting.section_number.trim().to_string(),
-                            section_code: meeting.sect_code.trim().to_string(),
-                            instructor: meeting
-                                .person_full_name
-                                .split_once(';')
-                                .unwrap()
-                                .0
-                                .trim()
-                                .to_string(),
-                            available_seats: max(meeting.avail_seat, 0),
-                            needs_waitlist: meeting.needs_waitlist == "Y",
-                            total_seats: meeting.section_capacity,
-                            waitlist_ct: meeting.count_on_waitlist,
-                            meetings: all_meetings,
-                        });
-                    }
-                }
-
-                Some(sections)
+                sections.push(CourseSection {
+                    subj_course_id: course_dept_id.clone(),
+                    section_id: meeting.section_number.trim().to_string(),
+                    section_code: meeting.sect_code.trim().to_string(),
+                    instructor: meeting
+                        .person_full_name
+                        .split_once(';')
+                        .unwrap()
+                        .0
+                        .trim()
+                        .to_string(),
+                    available_seats: max(meeting.avail_seat, 0),
+                    needs_waitlist: meeting.needs_waitlist == "Y",
+                    total_seats: meeting.section_capacity,
+                    waitlist_ct: meeting.count_on_waitlist,
+                    meetings: all_meetings,
+                });
             }
         }
+
+        Ok(sections)
     }
 
     /// Gets all courses that are available. This searches for all courses via Webreg's menu, but
@@ -776,11 +724,13 @@ impl<'a> WebRegWrapper<'a> {
     /// - `filter_by`: The request filter.
     ///
     /// # Returns
-    /// A vector consisting of all courses that are available, with detailed information.
+    /// A result that can return one of:
+    /// - A vector consisting of all courses that are available, with detailed information.
+    /// - Or, the error that was encoutnered.
     pub async fn search_courses_detailed(
         &self,
         filter_by: SearchType<'_>,
-    ) -> Option<Vec<CourseSection>> {
+    ) -> Output<'a, Vec<CourseSection>> {
         let get_zero_trim = |s: &[u8]| -> (usize, usize) {
             let start = s.iter().position(|p| *p != b'0').unwrap_or(0);
             let end = s.iter().rposition(|p| *p != b'0').unwrap_or(0);
@@ -813,8 +763,8 @@ impl<'a> WebRegWrapper<'a> {
         };
 
         let search_res = match self.search_courses(filter_by).await {
-            Some(r) => r,
-            None => return None,
+            Ok(r) => r,
+            Err(e) => return Err(e),
         };
 
         let mut vec: Vec<CourseSection> = vec![];
@@ -823,7 +773,7 @@ impl<'a> WebRegWrapper<'a> {
                 .get_course_info(r.subj_code.trim(), r.course_code.trim())
                 .await;
             match req_res {
-                Some(r) => r.into_iter().for_each(|x| {
+                Ok(r) => r.into_iter().for_each(|x| {
                     if !ids_to_filter.is_empty() {
                         let (start, end) = get_zero_trim(x.section_id.as_bytes());
                         if !ids_to_filter.contains(&&x.section_id.as_str()[start..end]) {
@@ -832,11 +782,11 @@ impl<'a> WebRegWrapper<'a> {
                     }
                     vec.push(x);
                 }),
-                None => break,
+                Err(_) => break,
             };
         }
 
-        Some(vec)
+        Ok(vec)
     }
 
     /// Gets all courses that are available. All this does is searches for all courses via Webreg's
@@ -850,7 +800,7 @@ impl<'a> WebRegWrapper<'a> {
     pub async fn search_courses(
         &self,
         filter_by: SearchType<'_>,
-    ) -> Option<Vec<WebRegSearchResultItem>> {
+    ) -> Output<'a, Vec<WebRegSearchResultItem>> {
         let url = match filter_by {
             SearchType::BySection(section) => Url::parse_with_params(
                 WEBREG_SEARCH_SEC,
@@ -978,28 +928,15 @@ impl<'a> WebRegWrapper<'a> {
             }
         };
 
-        let res = self
-            .client
-            .get(url)
-            .header(COOKIE, &self.cookies)
-            .header(USER_AGENT, MY_USER_AGENT)
-            .send()
-            .await;
-
-        match res {
-            Err(_) => None,
-            Ok(r) => {
-                if !r.status().is_success() {
-                    return None;
-                }
-
-                let text = r.text().await;
-                match text {
-                    Err(_) => None,
-                    Ok(t) => Some(serde_json::from_str(&t).unwrap_or_default()),
-                }
-            }
-        }
+        self._process_get_result::<Vec<WebRegSearchResultItem>>(
+            self.client
+                .get(url)
+                .header(COOKIE, &self.cookies)
+                .header(USER_AGENT, MY_USER_AGENT)
+                .send()
+                .await,
+        )
+        .await
     }
 
     /// Sends an email to yourself using the same email that is used to confirm that you have
@@ -1050,7 +987,7 @@ impl<'a> WebRegWrapper<'a> {
         &self,
         section_number: i64,
         new_grade_opt: &str,
-    ) -> Result<bool, Cow<'a, str>> {
+    ) -> Output<'a, bool> {
         match new_grade_opt {
             "L" | "P" | "S" => {}
             _ => return Err("Invalid grade option.".into()),
@@ -1072,7 +1009,7 @@ impl<'a> WebRegWrapper<'a> {
         let sec_id = poss_class.section_number.to_string();
         let units = poss_class.units.to_string();
 
-        self._process_response(
+        self._process_post_response(
             self.client
                 .post(CHANGE_ENROLL)
                 .form(&[
@@ -1108,11 +1045,7 @@ impl<'a> WebRegWrapper<'a> {
     /// # Returns
     /// `true` if the process succeeded, or a string containing the error message from WebReg if
     /// something wrong happened.
-    pub async fn add_to_plan(
-        &self,
-        plan_options: PlanAdd<'_>,
-        validate: bool,
-    ) -> Result<bool, Cow<'a, str>> {
+    pub async fn add_to_plan(&self, plan_options: PlanAdd<'_>, validate: bool) -> Output<'a, bool> {
         let u = plan_options.unit_count.to_string();
         let crsc_code = self._get_formatted_course_code(plan_options.course_code);
 
@@ -1121,7 +1054,7 @@ impl<'a> WebRegWrapper<'a> {
             // actually enroll in every component of the course.
             // Also, this can potentially return "false" due to you not being able to enroll in the
             // class, e.g. the class you're trying to plan is a major-restricted class.
-            self._process_response(
+            self._process_post_response(
                 self.client
                     .post(PLAN_EDIT)
                     .form(&[
@@ -1136,10 +1069,10 @@ impl<'a> WebRegWrapper<'a> {
                     .await,
             )
             .await
-            .unwrap_or_else(|_| false);
+            .unwrap_or(false);
         }
 
-        self._process_response(
+        self._process_post_response(
             self.client
                 .post(PLAN_ADD)
                 .form(&[
@@ -1185,8 +1118,8 @@ impl<'a> WebRegWrapper<'a> {
         &self,
         section_num: &str,
         schedule_name: Option<&'a str>,
-    ) -> Result<bool, Cow<'a, str>> {
-        self._process_response(
+    ) -> Output<'a, bool> {
+        self._process_post_response(
             self.client
                 .post(PLAN_REMOVE)
                 .form(&[
@@ -1220,7 +1153,7 @@ impl<'a> WebRegWrapper<'a> {
         is_enroll: bool,
         enroll_options: EnrollWaitAdd<'_>,
         validate: bool,
-    ) -> Result<bool, Cow<'a, str>> {
+    ) -> Output<'a, bool> {
         let base_reg_url = if is_enroll { ENROLL_ADD } else { WAITLIST_ADD };
         let base_edit_url = if is_enroll {
             ENROLL_EDIT
@@ -1234,63 +1167,53 @@ impl<'a> WebRegWrapper<'a> {
         };
 
         if validate {
-            let r = self
-                ._process_response(
-                    self.client
-                        .post(base_edit_url)
-                        .form(&[
-                            // These are required
-                            ("section", &*enroll_options.section_number),
-                            ("termcode", self.term),
-                            // These are optional.
-                            ("subjcode", ""),
-                            ("crsecode", ""),
-                        ])
-                        .header(COOKIE, &self.cookies)
-                        .header(USER_AGENT, MY_USER_AGENT)
-                        .send()
-                        .await,
-                )
-                .await;
-
-            if r.is_err() {
-                return r;
-            }
-        }
-
-        let result = self
-            ._process_response(
+            self._process_post_response(
                 self.client
-                    .post(base_reg_url)
+                    .post(base_edit_url)
                     .form(&[
                         // These are required
                         ("section", &*enroll_options.section_number),
                         ("termcode", self.term),
                         // These are optional.
-                        ("unit", &*u),
-                        (
-                            "grade",
-                            match enroll_options.grading_option {
-                                Some(r) if r == "L" || r == "P" || r == "S" => r,
-                                _ => "",
-                            },
-                        ),
-                        ("crsecode", ""),
                         ("subjcode", ""),
+                        ("crsecode", ""),
                     ])
                     .header(COOKIE, &self.cookies)
                     .header(USER_AGENT, MY_USER_AGENT)
                     .send()
                     .await,
             )
-            .await;
-
-        if result.is_err() {
-            return result;
+            .await?;
         }
 
+        self._process_post_response(
+            self.client
+                .post(base_reg_url)
+                .form(&[
+                    // These are required
+                    ("section", &*enroll_options.section_number),
+                    ("termcode", self.term),
+                    // These are optional.
+                    ("unit", &*u),
+                    (
+                        "grade",
+                        match enroll_options.grading_option {
+                            Some(r) if r == "L" || r == "P" || r == "S" => r,
+                            _ => "",
+                        },
+                    ),
+                    ("crsecode", ""),
+                    ("subjcode", ""),
+                ])
+                .header(COOKIE, &self.cookies)
+                .header(USER_AGENT, MY_USER_AGENT)
+                .send()
+                .await,
+        )
+        .await?;
+
         // This will always return true
-        self._process_response(
+        self._process_post_response(
             self.client
                 .post(PLAN_REMOVE_ALL)
                 .form(&[
@@ -1320,18 +1243,14 @@ impl<'a> WebRegWrapper<'a> {
     /// # Remarks
     /// It is a good idea to make a call to get your current schedule before you
     /// make a request here. That way, you know which classes can be dropped.
-    pub async fn drop_section(
-        &self,
-        was_enrolled: bool,
-        section_num: &'a str,
-    ) -> Result<bool, Cow<'a, str>> {
+    pub async fn drop_section(&self, was_enrolled: bool, section_num: &'a str) -> Output<'a, bool> {
         let base_reg_url = if was_enrolled {
             ENROLL_DROP
         } else {
             WAILIST_DROP
         };
 
-        self._process_response(
+        self._process_post_response(
             self.client
                 .post(base_reg_url)
                 .form(&[
@@ -1392,17 +1311,13 @@ impl<'a> WebRegWrapper<'a> {
     /// # Returns
     /// `true` if the process succeeded, or a string containing the error message from WebReg if
     /// something wrong happened.
-    pub async fn rename_schedule(
-        &self,
-        old_name: &str,
-        new_name: &str,
-    ) -> Result<bool, Cow<'a, str>> {
+    pub async fn rename_schedule(&self, old_name: &str, new_name: &str) -> Output<'a, bool> {
         // Can't rename your default schedule.
         if old_name == DEFAULT_SCHEDULE_NAME {
             return Err("You cannot rename the default schedule".into());
         }
 
-        self._process_response(
+        self._process_post_response(
             self.client
                 .post(RENAME_SCHEDULE)
                 .form(&[
@@ -1426,13 +1341,13 @@ impl<'a> WebRegWrapper<'a> {
     /// # Returns
     /// `true` if the process succeeded, or a string containing the error message from WebReg if
     /// something wrong happened.
-    pub async fn remove_schedule(&self, schedule_name: &str) -> Result<bool, Cow<'a, str>> {
+    pub async fn remove_schedule(&self, schedule_name: &str) -> Output<'a, bool> {
         // Can't remove your default schedule.
         if schedule_name == DEFAULT_SCHEDULE_NAME {
             return Err("You cannot remove the default schedule.".into());
         }
 
-        self._process_response(
+        self._process_post_response(
             self.client
                 .post(REMOVE_SCHEDULE)
                 .form(&[("termcode", self.term), ("schedname", schedule_name)])
@@ -1447,36 +1362,64 @@ impl<'a> WebRegWrapper<'a> {
     /// Gets all of your schedules.
     ///
     /// # Returns
-    /// A vector of strings representing the names of the schedules, or `None` if
-    /// something went wrong.
-    pub async fn get_schedule_list(&self) -> Option<Vec<String>> {
+    /// A result that is either one of:
+    /// - A vector of strings representing the names of the schedules
+    /// - Or the error that was occurred.
+    pub async fn get_schedule_list(&self) -> Output<'a, Vec<String>> {
         let url = Url::parse_with_params(ALL_SCHEDULE, &[("termcode", self.term)]).unwrap();
 
-        let res = self
-            .client
-            .get(url)
-            .header(COOKIE, &self.cookies)
-            .header(USER_AGENT, MY_USER_AGENT)
-            .send()
-            .await;
+        self._process_get_result::<Vec<String>>(
+            self.client
+                .get(url)
+                .header(COOKIE, &self.cookies)
+                .header(USER_AGENT, MY_USER_AGENT)
+                .send()
+                .await,
+        )
+        .await
+    }
 
+    /// Processes a GET response from the resulting JSON, if any.
+    ///
+    /// # Parameters
+    /// - `res`: The initial response.
+    ///
+    /// # Returns
+    /// The result of processing the response.
+    async fn _process_get_result<T: DeserializeOwned>(
+        &self,
+        res: Result<Response, Error>,
+    ) -> Result<T, Cow<'a, str>> {
         match res {
-            Err(_) => None,
+            Err(e) => Err(e.to_string().into()),
             Ok(r) => {
                 if !r.status().is_success() {
-                    return None;
+                    return Err(r.status().to_string().into());
                 }
 
-                let text = r.text().await;
-                match text {
-                    Err(_) => None,
-                    Ok(t) => Some(serde_json::from_str(&t).unwrap_or_default()),
+                let text = match r.text().await {
+                    Err(e) => return Err(e.to_string().into()),
+                    Ok(s) => s,
+                };
+
+                match serde_json::from_str::<T>(&text) {
+                    Err(e) => Err(e.to_string().into()),
+                    Ok(o) => Ok(o),
                 }
             }
         }
     }
 
-    async fn _process_response(&self, res: Result<Response, Error>) -> Result<bool, Cow<'a, str>> {
+    /// Processes a POST response from the resulting JSON, if any.
+    ///
+    /// # Parameters
+    /// - `res`: The initial response.
+    ///
+    /// # Returns
+    /// Either one of:
+    /// - `true` or `false`, depending on what WebReg returns.
+    /// - or some error message if an error occurred.
+    async fn _process_post_response(&self, res: Result<Response, Error>) -> Output<'a, bool> {
         match res {
             Err(e) => Err(e.to_string().into()),
             Ok(r) => {
@@ -1499,7 +1442,7 @@ impl<'a> WebRegWrapper<'a> {
                         let mut is_in_brace = false;
                         json["REASON"]
                             .as_str()
-                            .unwrap_or_else(|| "")
+                            .unwrap_or("")
                             .trim()
                             .chars()
                             .for_each(|c| {
