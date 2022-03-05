@@ -1,5 +1,5 @@
 # ucsd_webreg_rs
-An API wrapper for UCSD's [WebReg](https://act.ucsd.edu/webreg2/start) course enrollment system.
+An asynchronous API wrapper for UCSD's [WebReg](https://act.ucsd.edu/webreg2/start) course enrollment system.
 
 ## Programming Language
 The main project (API wrapper) uses the latest version of [Rust](https://www.rust-lang.org/).
@@ -39,7 +39,7 @@ Below are some features that this wrapper has, along with what I plan on working
 ## Program Features 
 These are some features that I plan on working on which will use the wrapper features above. 
 
-- [x] Ability to track the enrollment count of certain classes (e.g. tracking popularity of certain classes).
+- [x] Ability to track the enrollment count of certain classes (e.g. tracking popularity of certain classes). See it [in action](https://github.com/ewang2002/UCSDHistEnrollData).
 - [x] Create possible, conflict-free schedules.
 - [ ] Automatically enroll in classes when possible (e.g. first/second pass is available).
 - [ ] Ability to export your WebReg schedule into an `ical` format.
@@ -54,7 +54,7 @@ let w = WebRegWrapper::new(cookie.to_string(), term);
 
 Where the cookies are your authentication cookies (which you can find by looking at the cookie options in the header of any WebReg API request under the `Network` tab in Developer Tools). 
 
-Once created, you're able to use the various wrapper functions. Some useful examples are shown below (note that `w` refers to the declaration above).
+Once created, you're able to use the various wrapper functions. Some useful examples are shown below (note that `w` refers to the declaration above). Note that the return values may be slightly outdated, but the usage of the functions should remain the same.
 
 ### Check Login Status
 You can check to see if you are logged in (i.e. if the wrapper can actually perform any useful requests). 
@@ -308,9 +308,6 @@ This will return `true` if dropping was successful and `false` otherwise.
 
 ## Disclaimer
 I am not responsible for any damages or other issue(s) caused by any use of this wrapper. In other words, by using this wrapper, I am not responsible if you somehow get in trouble or otherwise run into problems.
-
-## Want Data?
-Specifically, how fast a lower- or upper-division CSE/COGS/MATH/ECE course fills up in Spring 2022? [Here you go.](https://github.com/ewang2002/UCSDHistEnrollData)
 
 ## License
 Everything in this repository is licensed under the MIT license.
