@@ -23,7 +23,7 @@ pub async fn run_basic_tests(w: &WebRegWrapper<'_>) {
 
     println!("=========================================");
     // Random
-    match w.get_course_info("CSE", "11101").await {
+    match w.get_course_info("MATH", "180A").await {
         Ok(s) => s.into_iter().for_each(|ss| println!("{}", ss.to_string())),
         Err(e) => eprintln!("{}", e),
     };

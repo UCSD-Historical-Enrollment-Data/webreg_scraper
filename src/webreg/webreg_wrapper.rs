@@ -221,7 +221,6 @@ impl<'a> WebRegWrapper<'a> {
                 });
             }
 
-            // TODO calculate waitlist somehow
             // Calculate the remaining meetings. other_special consists of midterms and
             // final exams, for example, since they are all shared in the same overall
             // section (e.g. A02 & A03 are in A00)
@@ -277,6 +276,17 @@ impl<'a> WebRegWrapper<'a> {
                 0
             };
 
+            let enrolled_count = match sch_meetings.iter().find(|x| x.enrolled_count.is_some()) {
+                Some(r) => r.enrolled_count.unwrap(),
+                None => -1,
+            };
+
+            let section_capacity = match sch_meetings.iter().find(|x| x.section_capacity.is_some())
+            {
+                Some(r) => r.section_capacity.unwrap(),
+                None => -1,
+            };
+
             schedule.push(ScheduledSection {
                 section_number: sch_meetings[0].section_number,
                 instructor: sch_meetings[0].person_full_name.trim().to_string(),
@@ -287,14 +297,9 @@ impl<'a> WebRegWrapper<'a> {
                     Some(r) => r.sect_code.to_string(),
                     None => sch_meetings[0].sect_code.to_string(),
                 },
-                section_capacity: match sch_meetings.iter().find(|x| x.section_capacity.is_some()) {
-                    Some(r) => r.section_capacity.unwrap(),
-                    None => -1,
-                },
-                enrolled_count: match sch_meetings.iter().find(|x| x.enrolled_count.is_some()) {
-                    Some(r) => r.enrolled_count.unwrap(),
-                    None => -1,
-                },
+                section_capacity,
+                enrolled_count,
+                available_seats: max(section_capacity - enrolled_count, 0),
                 grade_option: sch_meetings[0].grade_option.trim().to_string(),
                 units: sch_meetings[0].sect_credit_hrs,
                 enrolled_status: match &*sch_meetings[0].enroll_status {
@@ -308,6 +313,7 @@ impl<'a> WebRegWrapper<'a> {
             });
         }
 
+        // Classes with only a lecture
         for (_, sch_meetings) in special_classes {
             let day_code = sch_meetings
                 .iter()
@@ -321,6 +327,9 @@ impl<'a> WebRegWrapper<'a> {
                 MeetingDay::Repeated(webreg_helper::parse_day_code(&day_code))
             };
 
+            let section_capacity = sch_meetings[0].section_capacity.unwrap_or(-1);
+            let enrolled_count = sch_meetings[0].enrolled_count.unwrap_or(-1);
+
             schedule.push(ScheduledSection {
                 section_number: sch_meetings[0].section_number,
                 instructor: sch_meetings[0].person_full_name.trim().to_string(),
@@ -328,8 +337,9 @@ impl<'a> WebRegWrapper<'a> {
                 course_code: sch_meetings[0].course_code.trim().to_string(),
                 course_title: sch_meetings[0].course_title.trim().to_string(),
                 section_code: sch_meetings[0].sect_code.to_string(),
-                section_capacity: sch_meetings[0].section_capacity.unwrap_or(-1),
-                enrolled_count: sch_meetings[0].enrolled_count.unwrap_or(-1),
+                section_capacity,
+                enrolled_count,
+                available_seats: max(section_capacity - enrolled_count, 0),
                 grade_option: sch_meetings[0].grade_option.trim().to_string(),
                 units: sch_meetings[0].sect_credit_hrs,
                 enrolled_status: match &*sch_meetings[0].enroll_status {
@@ -426,6 +436,7 @@ impl<'a> WebRegWrapper<'a> {
                     .trim()
                     .to_string(),
                 available_seats: max(x.avail_seat, 0),
+                enrolled_ct: x.enrolled_count,
                 total_seats: x.section_capacity,
                 waitlist_ct: x.count_on_waitlist,
                 meetings: vec![],
@@ -506,6 +517,7 @@ impl<'a> WebRegWrapper<'a> {
                         .to_string(),
                     // Because it turns out that you can have negative available seats.
                     available_seats: max(webreg_meeting.avail_seat, 0),
+                    enrolled_ct: webreg_meeting.enrolled_count,
                     total_seats: webreg_meeting.section_capacity,
                     waitlist_ct: webreg_meeting.count_on_waitlist,
                     needs_waitlist: webreg_meeting.needs_waitlist == "Y",
@@ -659,6 +671,7 @@ impl<'a> WebRegWrapper<'a> {
                         .trim()
                         .to_string(),
                     available_seats: max(group.main_meeting[0].avail_seat, 0),
+                    enrolled_ct: group.main_meeting[0].enrolled_count,
                     total_seats: group.main_meeting[0].section_capacity,
                     waitlist_ct: group.main_meeting[0].count_on_waitlist,
                     meetings: all_meetings,
@@ -702,6 +715,7 @@ impl<'a> WebRegWrapper<'a> {
                         .trim()
                         .to_string(),
                     available_seats: max(meeting.avail_seat, 0),
+                    enrolled_ct: meeting.enrolled_count,
                     needs_waitlist: meeting.needs_waitlist == "Y",
                     total_seats: meeting.section_capacity,
                     waitlist_ct: meeting.count_on_waitlist,

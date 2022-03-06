@@ -1,4 +1,4 @@
-use std::{borrow::Cow, cmp::max};
+use std::borrow::Cow;
 
 use serde::Serialize;
 
@@ -13,8 +13,13 @@ pub struct CourseSection {
     pub section_code: String,
     /// The instructor.
     pub instructor: String,
-    /// The number of available seats.
+    /// The number of available seats. For example, suppose a section had 30 seats
+    /// total and there are 5 people enrolled. Then, this will be `25`.
     pub available_seats: i64,
+    /// The number of students enrolled in this section. For example, suppose a
+    /// section had 30 seats total and there are 5 people enrolled. Then, this will
+    /// be `5`.
+    pub enrolled_ct: i64,
     /// The total number of seats.
     pub total_seats: i64,
     /// The waitlist count.
@@ -42,12 +47,13 @@ impl CourseSection {
 impl ToString for CourseSection {
     fn to_string(&self) -> String {
         let mut s = format!(
-            "[{}] [{} / {}] {}: {}/{} (WL: {}) [{}]\n",
+            "[{}] [{} / {}] {} - Avail.: {}, Enroll.: {}, Total: {} (WL: {}) [{}]\n",
             self.subj_course_id,
             self.section_code,
             self.section_id,
             self.instructor,
             self.available_seats,
+            self.enrolled_ct,
             self.total_seats,
             self.waitlist_ct,
             if self.has_seats() { "E" } else { "W" }
@@ -157,6 +163,8 @@ pub struct ScheduledSection {
     pub section_capacity: i64,
     /// The number of people enrolled in this section.
     pub enrolled_count: i64,
+    /// The number of available seats left.
+    pub available_seats: i64,
     /// The grading option. This can be one of `L`, `P`, or `S`.
     pub grade_option: String,
     /// The instructor for this course.
@@ -183,7 +191,7 @@ impl ToString for ScheduledSection {
         };
 
         let mut s = format!(
-            "[{} / {}] {} ({} {}) with {} - {} ({} Units, {} Grading, {} / {})\n",
+            "[{} / {}] {} ({} {}) with {} - {} ({} Units, {} Grading, Avail.: {}, Enroll.: {}, Total: {})\n",
             self.section_code,
             self.section_number,
             self.course_title,
@@ -193,7 +201,8 @@ impl ToString for ScheduledSection {
             status,
             self.units,
             self.grade_option,
-            max(self.section_capacity - self.enrolled_count, -1),
+            self.available_seats,
+            self.enrolled_count,
             self.section_capacity
         );
 
