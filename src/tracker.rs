@@ -1,10 +1,98 @@
 use crate::util::{get_epoch_time, get_pretty_time};
-use crate::webreg::webreg_wrapper::SearchType;
-use crate::{SearchRequestBuilder, WebRegWrapper};
+use crate::webreg::webreg_wrapper::{CourseLevelFilter, SearchType};
+use crate::{SearchRequestBuilder, tracker, WebRegWrapper};
 use std::fs::OpenOptions;
 use std::io::{BufWriter, Write};
 use std::path::Path;
 use std::time::Duration;
+use serde_json::Value;
+
+#[cfg(debug_assertions)]
+const TIMEOUT: [u64; 3] = [5, 10, 15];
+
+#[cfg(not(debug_assertions))]
+// The idea is that it should take no more than 15 minutes for
+// WebReg to be available.
+const TIMEOUT: [u64; 3] = [8 * 60, 6 * 60, 4 * 60];
+
+
+/// Runs the WebReg tracker. This will optionally attempt to reconnect to
+/// WebReg when signed out.
+///
+/// # Parameters
+/// - `w`: The wrapper.
+/// - `cookie_url`: The URL to the API where new cookies can be requested. If none
+/// is specified, then this will automatically terminate upon any issue with the
+/// tracker.
+pub async fn run_tracker(w: WebRegWrapper<'_>, cookie_url: Option<&str>) {
+    let mut webreg_wrapper = w;
+    let term = webreg_wrapper.get_term();
+    loop {
+        tracker::track_webreg_enrollment(
+            &webreg_wrapper,
+            &SearchRequestBuilder::new()
+                .add_subject("CSE")
+                .add_subject("COGS")
+                .add_subject("MATH")
+                .add_subject("ECE")
+                .filter_courses_by(CourseLevelFilter::LowerDivision)
+                .filter_courses_by(CourseLevelFilter::UpperDivision),
+        )
+            .await;
+
+        // If we're here, this means something went wrong.
+        if cookie_url.is_none() {
+            break;
+        }
+
+        // Basically, keep on trying until we get back into WebReg.
+        let mut success = false;
+        for time in TIMEOUT {
+            println!("[{}] Taking a {} second break.", get_pretty_time(), time);
+            tokio::time::sleep(Duration::from_secs(time)).await;
+
+            // Get new cookies.
+            let new_cookie_str = {
+                match reqwest::get(cookie_url.unwrap()).await {
+                    Ok(t) => {
+                        let txt = t.text().await.unwrap_or_default();
+                        let json: Value = serde_json::from_str(&txt).unwrap_or_default();
+                        if json["cookie"].is_string() {
+                            Some(json["cookie"].as_str().unwrap().to_string())
+                        } else {
+                            None
+                        }
+                    }
+                    Err(_) => None,
+                }
+            };
+
+            // And then try to make a new wrapper with said cookies.
+            if let Some(c) = new_cookie_str {
+                // Empty string = failed to get data.
+                // Try again.
+                if c.is_empty() {
+                    continue;
+                }
+
+                webreg_wrapper = WebRegWrapper::new(c, term);
+                success = true;
+                break;
+            }
+        }
+
+        // If successful, we can continue pinging WebReg.
+        if success {
+            continue;
+        }
+
+        // Otherwise, gracefully quit.
+        break;
+    }
+
+    println!("[{}] Quitting.", get_pretty_time());
+}
+
 
 /// Tracks WebReg for enrollment information. This will continuously check specific courses for
 /// their enrollment information (number of students waitlisted/enrolled, total seats) along with
