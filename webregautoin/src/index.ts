@@ -93,17 +93,79 @@ async function getCookies(): Promise<string> {
     const content = await page.content();
     // This assumes that the credentials are valid.
     if (content.includes("Signing on Using:") && content.includes("TritonLink user name")) {
-        log("Attempting to sign in to TritonLink."
-            + " If you are asked to authenticate with Duo, do NOT accept until you are told to do so.");
+        log("Attempting to sign in to TritonLink.");
         // https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_Selectors
         await page.type('#ssousername', CONFIG.username);
         await page.type('#ssopassword', CONFIG.password);
         await page.click('button[type="submit"]');
-        await waitFor(5 * 1000);
     }
 
+    // Wait for either Duo 2FA frame (if we need 2FA) or "Go" button (if no 2FA needed) to show up
+    log("Waiting for Duo 2FA frame or 'Go' button to show up.");
+
+    let loggedIn = false;
+    const r = await Promise.race([
+        // Either wait for the 'Go' button to show up, which implies that we
+        // have an authenticated session.
+        (async () => {
+            await page.waitForSelector("#startpage-button-go", { visible: true, timeout: 30 * 1000 });
+            return 0;
+        })(),
+        // Or, we *repeatedly* check to see if the Duo 2FA frame is visible AND some components of
+        // the frame (in our case, the "Rememebr Me" checkbox) are visible.
+        (async () => {
+            const interval = await new Promise<NodeJS.Timeout>(r => {
+                const internalInterval = setInterval(async () => {
+                    try {
+                        // If we're logged in, then we can stop the interval.
+                        if (loggedIn) {
+                            r(internalInterval);
+                            return;
+                        }
+
+                        const possDuoFrame = await page.$("iframe[id='duo_iframe']");
+                        if (!possDuoFrame) {
+                            return;
+                        }
+
+                        const duoFrame = await possDuoFrame.contentFrame();
+                        if (!duoFrame) {
+                            return;
+                        }
+
+                        if (!(await duoFrame.$("#remember_me_label_text"))) {
+                            return;
+                        }
+
+                        r(internalInterval);
+                    }
+                    catch (e) {
+                        // Conveniently ignore the error
+                    }
+                }, 1000);
+            });
+
+            clearInterval(interval);
+            return 1;
+        })()
+    ]);
+
+    log(
+        r === 0
+            ? "'Go' button found. No 2FA needed."
+            : "Duo 2FA frame found. Ignore the initial 2FA request; i.e. do not"
+            + " accept the 2FA request until you are told to do so."
+    );
+
+    if (r === 0) {
+        loggedIn = true;
+    }
+
+    // Wait an additional 4 seconds to make sure everything loads up.
+    await waitFor(4 * 1000);
+
     // No go button means we need to log in.
-    if (!(await page.$('#startpage-button-go'))) {
+    if (!(await page.$("#startpage-button-go"))) {
         log("Beginning Duo 2FA process. Do not accept yet.");
         // Need to find a duo iframe so we can actually authenticate 
         const possDuoFrame = await page.$("iframe[id='duo_iframe']");
@@ -139,7 +201,7 @@ async function getCookies(): Promise<string> {
         log("A Duo push was sent. Please respond to the new 2FA request.");
     }
 
-    await page.waitForSelector('#startpage-button-go');
+    await page.waitForSelector('#startpage-button-go', { visible: true });
     log("Logged into WebReg successfully.");
     // Get cookies ready to load.
     await page.click('#startpage-button-go');
@@ -185,7 +247,7 @@ process.on('SIGTERM', shutDown);
 process.on('SIGINT', shutDown);
 
 async function shutDown(): Promise<void> {
-    log("Shutting down server.");
+    log("Shutting down server & closing browser.");
     BROWSER?.close();
     server.close();
 }
