@@ -77,6 +77,14 @@ impl<'a> WebRegWrapper<'a> {
         }
     }
 
+    /// Sets the cookies to the new, specified cookies.
+    ///
+    /// # Parameters
+    /// - `new_cookies`: The new cookies.
+    pub fn set_cookies(&mut self, new_cookies: String) {
+        self.cookies = new_cookies;
+    }
+
     /// Checks if the current WebReg instance is valid.
     ///
     /// # Returns

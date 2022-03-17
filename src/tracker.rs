@@ -24,12 +24,10 @@ const TIMEOUT: [u64; 3] = [8 * 60, 6 * 60, 4 * 60];
 /// - `cookie_url`: The URL to the API where new cookies can be requested. If none
 /// is specified, then this will automatically terminate upon any issue with the
 /// tracker.
-pub async fn run_tracker(w: WebRegWrapper<'_>, cookie_url: Option<&str>) {
-    let mut webreg_wrapper = w;
-    let term = webreg_wrapper.get_term();
+pub async fn run_tracker(w: &mut WebRegWrapper<'_>, cookie_url: Option<&str>) {
     loop {
         tracker::track_webreg_enrollment(
-            &webreg_wrapper,
+            &w,
             &SearchRequestBuilder::new()
                 .add_subject("CSE")
                 .add_subject("COGS")
@@ -75,7 +73,7 @@ pub async fn run_tracker(w: WebRegWrapper<'_>, cookie_url: Option<&str>) {
                     continue;
                 }
 
-                webreg_wrapper = WebRegWrapper::new(c, term);
+                w.set_cookies(c);
                 success = true;
                 break;
             }

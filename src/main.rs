@@ -25,7 +25,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         return Ok(());
     }
 
-    let w = WebRegWrapper::new(cookie.to_string(), TERM);
+    let mut w = WebRegWrapper::new(cookie.to_string(), TERM);
     if !w.is_valid().await {
         eprintln!("Failed to login.");
         return Ok(());
@@ -39,7 +39,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     if cfg!(debug_assertions) {
         tests::run_basic_tests(&w).await;
     } else {
-        run_tracker(w, Some("http://localhost:3000/cookie")).await;
+        run_tracker(&mut w, Some("http://localhost:3000/cookie")).await;
     }
 
     Ok(())
