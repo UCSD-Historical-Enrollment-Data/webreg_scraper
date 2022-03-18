@@ -10,6 +10,13 @@ import * as path from "path";
 import * as puppeteer from "puppeteer";
 import * as http from "http";
 
+// The term to select. A term MUST be selected in order for the resulting cookies to be valid.
+// Use inspect elements on the dropdown box to get the option value. Specifically, TERM should 
+// be the value given by 
+// <option value="THIS">Some Quarter</option>
+//                ----
+const TERM: string = "5200:::SP22";
+
 // Constants & other important variables
 let BROWSER: puppeteer.Browser | null = null;
 const CONFIG: IConfiguration = JSON.parse(
@@ -61,7 +68,8 @@ async function getCookies(): Promise<string> {
     if (!BROWSER) {
         log("Launching browser for first-time setup.");
         BROWSER = await puppeteer.launch({
-            args: ['--no-sandbox', '--disable-setuid-sandbox']
+            args: ['--no-sandbox', '--disable-setuid-sandbox'],
+            headless: false
         });
     }
 
@@ -201,12 +209,18 @@ async function getCookies(): Promise<string> {
         log("A Duo push was sent. Please respond to the new 2FA request.");
     }
 
-    await page.waitForSelector('#startpage-button-go', { visible: true });
+    await Promise.all([
+        page.waitForSelector("#startpage-select-term", { visible: true }),
+        page.waitForSelector('#startpage-button-go', { visible: true })
+    ]);
     log("Logged into WebReg successfully.");
+
+    await page.select("#startpage-select-term", TERM);
+    const term = TERM.split(":::").at(-1) ?? "";
     // Get cookies ready to load.
     await page.click('#startpage-button-go');
-    const cookies = await page.cookies("https://act.ucsd.edu/webreg2/svc/wradapter/secure/sched-get-schednames?termcode=SP22");
-    log("Extracted cookies and responding back with them.\n");
+    const cookies = await page.cookies(`https://act.ucsd.edu/webreg2/svc/wradapter/secure/sched-get-schednames?termcode=${term}`);
+    log(`Extracted cookies for term '${term}' and responding back with them.\n`);
     return cookies.map(x => `${x.name}=${x.value}`).join("; ");
 }
 
