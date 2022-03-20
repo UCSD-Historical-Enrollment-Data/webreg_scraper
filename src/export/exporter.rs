@@ -1,11 +1,9 @@
-use crate::{
-    schedule::scheduler::Schedule,
-    webreg::webreg_wrapper::{SearchRequestBuilder, SearchType, WebRegWrapper},
-};
+use crate::schedule::scheduler::Schedule;
 use std::{
     fs::OpenOptions,
     io::{BufWriter, Write},
 };
+use webweg::webreg_wrapper::{SearchRequestBuilder, SearchType, WebRegWrapper};
 
 const SCHEDULE_FILE_NAME: &str = "schedule.txt";
 

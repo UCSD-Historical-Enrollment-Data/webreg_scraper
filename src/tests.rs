@@ -4,10 +4,8 @@
 
 use crate::export::exporter::save_schedules;
 use crate::schedule::scheduler::{self, ScheduleConstraint};
-use crate::webreg::webreg_wrapper::{
-    EnrollWaitAdd, PlanAdd, SearchRequestBuilder, SearchType, WebRegWrapper,
-};
 use std::time::{Duration, Instant};
+use webweg::webreg_wrapper::{EnrollWaitAdd, PlanAdd, SearchRequestBuilder, SearchType, WebRegWrapper};
 
 /// Runs very basic tests.
 ///

@@ -1,11 +1,11 @@
+use crate::tracker;
 use crate::util::{get_epoch_time, get_pretty_time};
-use crate::webreg::webreg_wrapper::{CourseLevelFilter, SearchType};
-use crate::{SearchRequestBuilder, tracker, WebRegWrapper};
+use serde_json::Value;
 use std::fs::OpenOptions;
 use std::io::{BufWriter, Write};
 use std::path::Path;
 use std::time::Duration;
-use serde_json::Value;
+use webweg::webreg_wrapper::{CourseLevelFilter, SearchRequestBuilder, SearchType, WebRegWrapper};
 
 #[cfg(debug_assertions)]
 const TIMEOUT: [u64; 3] = [5, 10, 15];
@@ -14,7 +14,6 @@ const TIMEOUT: [u64; 3] = [5, 10, 15];
 // The idea is that it should take no more than 15 minutes for
 // WebReg to be available.
 const TIMEOUT: [u64; 3] = [8 * 60, 6 * 60, 4 * 60];
-
 
 /// Runs the WebReg tracker. This will optionally attempt to reconnect to
 /// WebReg when signed out.
@@ -36,7 +35,7 @@ pub async fn run_tracker(w: &mut WebRegWrapper<'_>, cookie_url: Option<&str>) {
                 .filter_courses_by(CourseLevelFilter::LowerDivision)
                 .filter_courses_by(CourseLevelFilter::UpperDivision),
         )
-            .await;
+        .await;
 
         // If we're here, this means something went wrong.
         if cookie_url.is_none() {
@@ -90,7 +89,6 @@ pub async fn run_tracker(w: &mut WebRegWrapper<'_>, cookie_url: Option<&str>) {
 
     println!("[{}] Quitting.", get_pretty_time());
 }
-
 
 /// Tracks WebReg for enrollment information. This will continuously check specific courses for
 /// their enrollment information (number of students waitlisted/enrolled, total seats) along with

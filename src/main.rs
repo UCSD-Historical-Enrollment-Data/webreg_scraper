@@ -4,11 +4,10 @@ mod schedule;
 mod tests;
 mod tracker;
 mod util;
-mod webreg;
 
 use crate::tracker::run_tracker;
-use crate::webreg::webreg_wrapper::{SearchRequestBuilder, WebRegWrapper};
 use std::error::Error;
+use webweg::webreg_wrapper::WebRegWrapper;
 
 const TERM: &str = "SP22";
 const VERSION: &str = env!("CARGO_PKG_VERSION");
