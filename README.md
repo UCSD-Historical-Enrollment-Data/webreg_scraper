@@ -20,8 +20,16 @@ This program can do the following.
 - Create conflict-free schedules (not exactly efficiently, but it works).
 - Tracks enrollment counts and saves this information to a CSV file.
 - Exports all available sections into a CSV file.
+- Host a small web server (using [Rocket](https://rocket.rs/)) to make it easy for other applications to use the data.
 
+## Webweg
 Note that this program makes use of the [webweg](https://github.com/ewang2002/webweg) crate, which I developed.
+
+## Future Plans
+Whenever I have free time and I'm not busy with other projects, I definitely plan on coming back to this project and:
+- Add more stuff to it (while also learning Rust)
+- Clean up a lot of the code.
+- And more!
 
 ## License
 Everything in this repository is licensed under the MIT license.

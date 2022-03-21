@@ -4,7 +4,9 @@ use serde_json::Value;
 use std::fs::OpenOptions;
 use std::io::{BufWriter, Write};
 use std::path::Path;
+use std::sync::Arc;
 use std::time::Duration;
+use tokio::sync::Mutex;
 use webweg::webreg_wrapper::{CourseLevelFilter, SearchRequestBuilder, SearchType, WebRegWrapper};
 
 #[cfg(debug_assertions)]
@@ -23,7 +25,7 @@ const TIMEOUT: [u64; 3] = [8 * 60, 6 * 60, 4 * 60];
 /// - `cookie_url`: The URL to the API where new cookies can be requested. If none
 /// is specified, then this will automatically terminate upon any issue with the
 /// tracker.
-pub async fn run_tracker(w: &mut WebRegWrapper<'_>, cookie_url: Option<&str>) {
+pub async fn run_tracker(w: Arc<Mutex<WebRegWrapper<'_>>>, cookie_url: Option<&str>) {
     loop {
         tracker::track_webreg_enrollment(
             &w,
@@ -72,7 +74,7 @@ pub async fn run_tracker(w: &mut WebRegWrapper<'_>, cookie_url: Option<&str>) {
                     continue;
                 }
 
-                w.set_cookies(c);
+                w.lock().await.set_cookies(c);
                 success = true;
                 break;
             }
@@ -98,7 +100,7 @@ pub async fn run_tracker(w: &mut WebRegWrapper<'_>, cookie_url: Option<&str>) {
 /// - `wrapper`: The wrapper.
 /// - `search_res`: The courses to search for.
 pub async fn track_webreg_enrollment(
-    wrapper: &WebRegWrapper<'_>,
+    wrapper: &Arc<Mutex<WebRegWrapper<'_>>>,
     search_res: &SearchRequestBuilder<'_>,
 ) {
     let file_name = format!(
@@ -125,10 +127,13 @@ pub async fn track_webreg_enrollment(
     let mut fail_count = 0;
     'main: loop {
         writer.flush().unwrap();
-        let results = wrapper
+        let w = wrapper.lock().await;
+        let results = w
             .search_courses(SearchType::Advanced(search_res))
             .await
             .unwrap_or_default();
+        // Drop the Mutex to unlock it
+        drop(w);
 
         if results.is_empty() {
             eprintln!("[{}] No courses found. Exiting.", get_pretty_time());
@@ -150,9 +155,12 @@ pub async fn track_webreg_enrollment(
                 break 'main;
             }
 
-            let res = wrapper
+            let w = wrapper.lock().await;
+            let res = w
                 .get_enrollment_count(r.subj_code.trim(), r.course_code.trim())
                 .await;
+            drop(w);
+
             match res {
                 Err(e) => {
                     fail_count += 1;
