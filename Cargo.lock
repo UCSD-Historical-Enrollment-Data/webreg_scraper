@@ -1779,13 +1779,12 @@ dependencies = [
 
 [[package]]
 name = "webweg"
-version = "0.1.0"
-source = "git+https://github.com/ewang2002/webweg?branch=stable#325506aac0300cf9196bb0c456fb3fce9a4097d8"
+version = "0.1.1"
+source = "git+https://github.com/ewang2002/webweg?branch=stable#9218855ee2e091c4bebdbd4a0e1a521278fa5e0d"
 dependencies = [
  "reqwest",
  "serde",
  "serde_json",
- "tokio",
  "url",
 ]
 

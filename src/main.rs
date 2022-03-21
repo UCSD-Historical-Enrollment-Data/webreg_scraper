@@ -6,6 +6,7 @@ mod util;
 
 use crate::tracker::run_tracker;
 use once_cell::sync::Lazy;
+use rocket::response::content;
 use rocket::{get, routes};
 use std::error::Error;
 use std::sync::Arc;
@@ -53,13 +54,18 @@ async fn main() -> Result<(), Box<dyn Error>> {
 }
 
 #[get("/course/<subj>/<num>")]
-async fn get_course_info(subj: String, num: String) -> String {
+async fn get_course_info(subj: String, num: String) -> content::Json<String> {
     let w = WEBREG_WRAPPER.lock().await;
     let res = w.get_course_info(&subj, &num).await;
     drop(w);
     match res {
-        Ok(o) => serde_json::to_string(&o).unwrap_or_else(|_| "".to_string()),
-        Err(e) => e.to_string(),
+        Ok(o) => content::Json(serde_json::to_string(&o).unwrap_or_else(|_| "[]".to_string())),
+        Err(e) => {
+            let mut s = String::from("{ \"error\": ");
+            s.push_str(&format!("\"{}\" ", e));
+            s.push_str("}");
+            content::Json(s)
+        },
     }
 }
 
