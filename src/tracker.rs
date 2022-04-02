@@ -190,7 +190,7 @@ pub async fn track_webreg_enrollment(
                             c.section_code,
                             c.section_id,
                             // Every instructor name (except staff) has a comma
-                            c.instructor.replace(",", ";"),
+                            c.instructor.join(" & ").replace(",", ";"),
                             c.available_seats,
                             c.waitlist_ct,
                             c.total_seats,
