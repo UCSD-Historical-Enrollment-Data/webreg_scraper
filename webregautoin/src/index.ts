@@ -15,14 +15,43 @@ import * as http from "http";
 // be the value given by 
 // <option value="THIS">Some Quarter</option>
 //                ----
-const TERM: string = "5200:::SP22";
+const ALL_TERMS: readonly string[] = [
+    "5200:::SP22",
+    "5210:::S122",
+    "5220:::S222",
+    "5230:::S322"
+];
+
+function printHelpMessage(): void {
+    console.error("Usage: node index.js <term> <port>");
+    console.error(`\tWhere <term> can be one of: ${ALL_TERMS.map(x => x.split(":::")[1]).join(", ")}.`);
+    console.error("\tWhere <port> is an integer.");
+    console.error("Example: node index.js SP22 3000");
+}
+
+// Read command line arguments, which should be in the form
+//           node index.js <term> <port>
+//           e.g. node index.js S122 3000
+const args = process.argv.slice(2);
+if (args.length < 2) {
+    printHelpMessage();
+    process.exit(1);
+}
+
+const tempTerm = args[0].toUpperCase().trim();
+const termToUse = ALL_TERMS.find(x => x.endsWith(tempTerm));
+const port = Number.parseInt(args[1], 10);
+if (!termToUse || Number.isNaN(port)) {
+    printHelpMessage();
+    process.exit(1);
+}
+
 
 // Constants & other important variables
 let BROWSER: puppeteer.Browser | null = null;
 const CONFIG: IConfiguration = JSON.parse(
     fs.readFileSync(path.join(__dirname, "..", "credentials.json")
-    ).toString());
-const PORT: number = 3000;
+).toString());
 const WEBREG_URL: string = "https://act.ucsd.edu/webreg2/start";
 
 interface IConfiguration {
@@ -44,7 +73,7 @@ function log(msg: string): void {
         minute: "numeric",
         second: "numeric",
     }).format(new Date());
-    console.info(`[${time}] ${msg}`);
+    console.info(`[${time}] [${termToUse}] ${msg}`);
 }
 
 /**
@@ -64,7 +93,7 @@ function waitFor(ms: number): Promise<void> {
  * @returns The cookies.
  */
 async function getCookies(): Promise<string> {
-    log("GetCookies function called.")
+    log(`GetCookies function called.`)
     if (!BROWSER) {
         log("Launching browser for first-time setup.");
         BROWSER = await puppeteer.launch({
@@ -214,8 +243,8 @@ async function getCookies(): Promise<string> {
     ]);
     log("Logged into WebReg successfully.");
 
-    await page.select("#startpage-select-term", TERM);
-    const term = TERM.split(":::").at(-1) ?? "";
+    await page.select("#startpage-select-term", termToUse!);
+    const term = termToUse!.split(":::").at(-1) ?? "";
     // Get cookies ready to load.
     await page.click('#startpage-button-go');
     const cookies = await page.cookies(`https://act.ucsd.edu/webreg2/svc/wradapter/secure/sched-get-schednames?termcode=${term}`);
@@ -252,8 +281,8 @@ const server = http.createServer(async (req, res) => {
     );
 });
 
-server.listen(PORT, () => {
-    log(`Server listening on port ${PORT}`);
+server.listen(port, () => {
+    log(`Server listening on port ${port}`);
 });
 
 process.on('SIGTERM', shutDown);
