@@ -8,5 +8,6 @@ target/
 
 # Misc. stuff
 cookie.txt
+cookie_*.txt
 *.csv
 schedule.txt

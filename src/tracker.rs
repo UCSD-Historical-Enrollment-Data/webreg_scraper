@@ -1,5 +1,5 @@
-use crate::tracker;
 use crate::util::{get_epoch_time, get_pretty_time};
+use crate::{tracker, BASE_COOLDOWN, TERMS};
 use serde_json::Value;
 use std::fs::OpenOptions;
 use std::io::{BufWriter, Write};
@@ -25,7 +25,11 @@ const TIMEOUT: [u64; 3] = [8 * 60, 6 * 60, 4 * 60];
 /// - `cookie_url`: The URL to the API where new cookies can be requested. If none
 /// is specified, then this will automatically terminate upon any issue with the
 /// tracker.
-pub async fn run_tracker(w: Arc<Mutex<WebRegWrapper<'_>>>, cookie_url: Option<&str>) {
+/// - `term`: The term associated with this tracker.
+pub async fn run_tracker(w: Arc<Mutex<WebRegWrapper<'_>>>, cookie_url: Option<&str>, term: &str) {
+    // In case the given cookies were invalid, if this variable is false, we skip the
+    // initial delay and immediately try to fetch the cookies.
+    let mut first_passed = false;
     loop {
         tracker::track_webreg_enrollment(
             &w,
@@ -36,6 +40,7 @@ pub async fn run_tracker(w: Arc<Mutex<WebRegWrapper<'_>>>, cookie_url: Option<&s
                 .add_subject("ECE")
                 .filter_courses_by(CourseLevelFilter::LowerDivision)
                 .filter_courses_by(CourseLevelFilter::UpperDivision),
+            term,
         )
         .await;
 
@@ -47,8 +52,12 @@ pub async fn run_tracker(w: Arc<Mutex<WebRegWrapper<'_>>>, cookie_url: Option<&s
         // Basically, keep on trying until we get back into WebReg.
         let mut success = false;
         for time in TIMEOUT {
-            println!("[{}] Taking a {} second break.", get_pretty_time(), time);
-            tokio::time::sleep(Duration::from_secs(time)).await;
+            if first_passed {
+                println!("[{}] [{}] Taking a {} second break.", term, get_pretty_time(), time);
+                tokio::time::sleep(Duration::from_secs(time)).await;
+            }
+
+            first_passed = true;
 
             // Get new cookies.
             let new_cookie_str = {
@@ -89,7 +98,7 @@ pub async fn run_tracker(w: Arc<Mutex<WebRegWrapper<'_>>>, cookie_url: Option<&s
         break;
     }
 
-    println!("[{}] Quitting.", get_pretty_time());
+    println!("[{}] [{}] Quitting.", term, get_pretty_time());
 }
 
 /// Tracks WebReg for enrollment information. This will continuously check specific courses for
@@ -99,13 +108,27 @@ pub async fn run_tracker(w: Arc<Mutex<WebRegWrapper<'_>>>, cookie_url: Option<&s
 /// # Parameters
 /// - `wrapper`: The wrapper.
 /// - `search_res`: The courses to search for.
+/// - `term`: The term associated with this tracker.
 pub async fn track_webreg_enrollment(
     wrapper: &Arc<Mutex<WebRegWrapper<'_>>>,
     search_res: &SearchRequestBuilder<'_>,
+    term: &str,
 ) {
+    // If the wrapper doesn't have a valid cookie, then return.
+    if !wrapper.lock().await.is_valid().await {
+        eprintln!(
+            "[{}] [{}] Initial instance is not valid. Returning.",
+            term,
+            get_pretty_time()
+        );
+
+        return;
+    }
+
     let file_name = format!(
-        "enrollment_{}.csv",
-        chrono::offset::Local::now().format("%FT%H_%M_%S")
+        "enrollment_{}_{}.csv",
+        chrono::offset::Local::now().format("%FT%H_%M_%S"),
+        term
     );
     let is_new = !Path::new(&file_name).exists();
 
@@ -113,13 +136,13 @@ pub async fn track_webreg_enrollment(
         .append(true)
         .create(true)
         .open(&file_name)
-        .expect("could not open or create 'enrollment.csv'");
+        .unwrap_or_else(|_| panic!("could not open or create '{}'", file_name));
 
     let mut writer = BufWriter::new(f);
     if is_new {
         writeln!(
             writer,
-            "time,subj_course_id,sec_code,sec_id,prof,available,waitlist,total"
+            "time,subj_course_id,sec_code,sec_id,prof,available,waitlist,total,enrolled_ct"
         )
         .unwrap();
     }
@@ -136,20 +159,26 @@ pub async fn track_webreg_enrollment(
         drop(w);
 
         if results.is_empty() {
-            eprintln!("[{}] No courses found. Exiting.", get_pretty_time());
+            eprintln!(
+                "[{}] [{}] No courses found. Exiting.",
+                term,
+                get_pretty_time()
+            );
             break;
         }
 
         println!(
-            "[{}] Found {} results successfully.",
+            "[{}] [{}] Found {} results successfully.",
+            term,
             get_pretty_time(),
             results.len()
         );
 
         for r in results {
-            if fail_count != 0 && fail_count > 20 {
+            if fail_count != 0 && fail_count > 12 {
                 eprintln!(
-                    "[{}] Too many failures when trying to request data from WebReg. Exiting.",
+                    "[{}] [{}] Too many failures when trying to request data from WebReg.",
+                    term,
                     get_pretty_time()
                 );
                 break 'main;
@@ -165,7 +194,8 @@ pub async fn track_webreg_enrollment(
                 Err(e) => {
                     fail_count += 1;
                     eprintln!(
-                        "[{}] An error occurred ({}). Skipping. (FAIL_COUNT: {})",
+                        "[{}] [{}] An error occurred ({}). Skipping. (FAIL_COUNT: {})",
+                        term,
                         get_pretty_time(),
                         e,
                         fail_count
@@ -174,7 +204,8 @@ pub async fn track_webreg_enrollment(
                 Ok(r) if !r.is_empty() => {
                     fail_count = 0;
                     println!(
-                        "[{}] Processing {} section(s) for {}.",
+                        "[{}] [{}] Processing {} section(s) for {}.",
+                        term,
                         get_pretty_time(),
                         r.len(),
                         r[0].subj_course_id
@@ -184,7 +215,7 @@ pub async fn track_webreg_enrollment(
                     r.into_iter().for_each(|c| {
                         writeln!(
                             writer,
-                            "{},{},{},{},{},{},{},{}",
+                            "{},{},{},{},{},{},{},{},{}",
                             time,
                             c.subj_course_id,
                             c.section_code,
@@ -194,6 +225,7 @@ pub async fn track_webreg_enrollment(
                             c.available_seats,
                             c.waitlist_ct,
                             c.total_seats,
+                            c.enrolled_ct,
                         )
                         .unwrap()
                     });
@@ -201,7 +233,8 @@ pub async fn track_webreg_enrollment(
                 _ => {
                     fail_count += 1;
                     eprintln!(
-                        "[{}] Course {} {} not found on WebReg. Were you logged out? (FAIL_COUNT: {}).",
+                        "[{}] [{}] Course {} {} not found. Were you logged out? (FAIL_COUNT: {}).",
+                        term,
                         get_pretty_time(),
                         r.subj_code,
                         r.course_code,
@@ -211,7 +244,7 @@ pub async fn track_webreg_enrollment(
             }
 
             // Just to be nice to webreg
-            tokio::time::sleep(Duration::from_secs(3)).await;
+            tokio::time::sleep(Duration::from_secs((TERMS.len() * BASE_COOLDOWN) as u64)).await;
         }
     }
 

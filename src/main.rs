@@ -8,18 +8,50 @@ use crate::tracker::run_tracker;
 use once_cell::sync::Lazy;
 use rocket::response::content;
 use rocket::{get, routes};
+use serde_json::json;
+use std::collections::HashMap;
 use std::error::Error;
+use std::fs;
+use std::path::Path;
 use std::sync::Arc;
+use std::time::Duration;
 use tokio::sync::Mutex;
 use webweg::webreg_wrapper::WebRegWrapper;
 
-const TERM: &str = "SP22";
+/// All terms and their associated "recovery URLs"
+pub const TERMS: [[&str; 2]; 4] = [
+    ["SP22", "http://localhost:3000/cookie"],
+    ["S122", "http://localhost:3001/cookie"],
+    ["S222", "http://localhost:3002/cookie"],
+    ["S322", "http://localhost:3003/cookie"],
+];
+
+/// The cooldown, in seconds. The overall cooldown will be given by BASE_COOLDOWN * TERMS.len().
+pub const BASE_COOLDOWN: usize = 2;
+
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
-static WEBREG_WRAPPER: Lazy<Arc<Mutex<WebRegWrapper>>> = Lazy::new(|| {
-    let cookie = get_cookies();
-    let cookie = cookie.trim();
-    Arc::new(Mutex::new(WebRegWrapper::new(cookie.to_string(), TERM)))
+struct WebRegHandler<'a> {
+    wrapper: Arc<Mutex<WebRegWrapper<'a>>>,
+    terms_index: usize,
+}
+
+static WEBREG_WRAPPERS: Lazy<HashMap<&str, WebRegHandler>> = Lazy::new(|| {
+    let mut map: HashMap<&str, WebRegHandler> = HashMap::new();
+
+    for (i, [term, _]) in TERMS.iter().enumerate() {
+        let cookie = get_cookies(term);
+        let cookie = cookie.trim();
+        map.insert(
+            term,
+            WebRegHandler {
+                wrapper: Arc::new(Mutex::new(WebRegWrapper::new(cookie.to_string(), term))),
+                terms_index: i,
+            },
+        );
+    }
+
+    map
 });
 
 // When I feel like everything's good enough, I'll probably make this into
@@ -27,20 +59,24 @@ static WEBREG_WRAPPER: Lazy<Arc<Mutex<WebRegWrapper>>> = Lazy::new(|| {
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<(), Box<dyn Error>> {
     println!("WebRegWrapper Version {}\n", VERSION);
-    if !WEBREG_WRAPPER.lock().await.is_valid().await {
-        eprintln!("Failed to login.");
-        return Ok(());
+
+    let mut handles = vec![];
+    for (_, wg_handler) in WEBREG_WRAPPERS.iter() {
+        let clone = wg_handler.wrapper.clone();
+        handles.push(tokio::spawn(async move {
+            run_tracker(
+                clone,
+                match TERMS[wg_handler.terms_index][1] {
+                    x if x.is_empty() => None,
+                    y => Some(y),
+                },
+                TERMS[wg_handler.terms_index][0],
+            )
+            .await;
+        }));
+
+        tokio::time::sleep(Duration::from_secs((BASE_COOLDOWN) as u64)).await;
     }
-
-    println!(
-        "Logged in successfully. Account name: {}",
-        WEBREG_WRAPPER.lock().await.get_account_name().await
-    );
-
-    let clone = WEBREG_WRAPPER.clone();
-    let jh = tokio::spawn(async move {
-        run_tracker(clone, Some("http://localhost:3000/cookie")).await;
-    });
 
     rocket::build()
         .mount("/", routes![get_course_info])
@@ -48,33 +84,34 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .await
         .unwrap();
 
-    // If, for some reason rocket dies, at least this will keep running
-    jh.await.unwrap();
     Ok(())
 }
 
-#[get("/course/<subj>/<num>")]
-async fn get_course_info(subj: String, num: String) -> content::Json<String> {
-    let w = WEBREG_WRAPPER.lock().await;
-    let res = w.get_course_info(&subj, &num).await;
-    drop(w);
-    match res {
-        Ok(o) => content::Json(serde_json::to_string(&o).unwrap_or_else(|_| "[]".to_string())),
-        Err(e) => {
-            let mut s = String::from("{ \"error\": ");
-            s.push_str(&format!("\"{}\" ", e));
-            s.push_str("}");
-            content::Json(s)
-        },
+#[get("/course/<term>/<subj>/<num>")]
+async fn get_course_info(term: String, subj: String, num: String) -> content::Json<String> {
+    if let Some(wg_handler) = WEBREG_WRAPPERS.get(&term.as_str()) {
+        let wg_handler = wg_handler.wrapper.lock().await;
+        let res = wg_handler.get_course_info(&subj, &num).await;
+        drop(wg_handler);
+        match res {
+            Ok(o) => content::Json(serde_json::to_string(&o).unwrap_or_else(|_| "[]".to_string())),
+            Err(e) => content::Json(json!({ "error": e }).to_string()),
+        }
+    } else {
+        content::Json(
+            json!({
+                "error": "Invalid term specified."
+            })
+            .to_string(),
+        )
     }
 }
 
-fn get_cookies() -> String {
-    use std::fs;
-    use std::path::Path;
-    let file = Path::new("cookie.txt");
+fn get_cookies(term: &str) -> String {
+    let file_name = format!("cookie_{}.txt", term);
+    let file = Path::new(&file_name);
     if !file.exists() {
-        eprintln!("'cookie.txt' file does not exist. Try again.");
+        eprintln!("'{}' file does not exist. Try again.", file_name);
         return "".to_string();
     }
 
