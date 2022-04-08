@@ -96,8 +96,7 @@ async function getCookies(): Promise<string> {
     if (!BROWSER) {
         log("Launching browser for first-time setup.");
         BROWSER = await puppeteer.launch({
-            args: ['--no-sandbox', '--disable-setuid-sandbox'],
-            headless: false
+            args: ['--no-sandbox', '--disable-setuid-sandbox']
         });
     }
 
