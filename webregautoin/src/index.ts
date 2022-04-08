@@ -16,7 +16,6 @@ import * as http from "http";
 // <option value="THIS">Some Quarter</option>
 //                ----
 const ALL_TERMS: readonly string[] = [
-    "5200:::SP22",
     "5210:::S122",
     "5220:::S222",
     "5230:::S322"
@@ -97,7 +96,8 @@ async function getCookies(): Promise<string> {
     if (!BROWSER) {
         log("Launching browser for first-time setup.");
         BROWSER = await puppeteer.launch({
-            args: ['--no-sandbox', '--disable-setuid-sandbox']
+            args: ['--no-sandbox', '--disable-setuid-sandbox'],
+            headless: false
         });
     }
 

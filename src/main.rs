@@ -19,15 +19,14 @@ use tokio::sync::Mutex;
 use webweg::webreg_wrapper::WebRegWrapper;
 
 /// All terms and their associated "recovery URLs"
-pub const TERMS: [[&str; 2]; 4] = [
-    ["SP22", "http://localhost:3000/cookie"],
-    ["S122", "http://localhost:3001/cookie"],
-    ["S222", "http://localhost:3002/cookie"],
-    ["S322", "http://localhost:3003/cookie"],
+pub const TERMS: [[&str; 2]; 3] = [
+    ["S122", "http://localhost:3000/cookie"],
+    ["S222", "http://localhost:3001/cookie"],
+    ["S322", "http://localhost:3002/cookie"],
 ];
 
 /// The cooldown, in seconds. The overall cooldown will be given by BASE_COOLDOWN * TERMS.len().
-pub const BASE_COOLDOWN: usize = 2;
+pub const BASE_COOLDOWN: usize = 1;
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
