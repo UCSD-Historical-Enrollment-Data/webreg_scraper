@@ -53,7 +53,12 @@ pub async fn run_tracker(w: Arc<Mutex<WebRegWrapper<'_>>>, cookie_url: Option<&s
         let mut success = false;
         for time in TIMEOUT {
             if first_passed {
-                println!("[{}] [{}] Taking a {} second break.", term, get_pretty_time(), time);
+                println!(
+                    "[{}] [{}] Taking a {} second break.",
+                    term,
+                    get_pretty_time(),
+                    time
+                );
                 tokio::time::sleep(Duration::from_secs(time)).await;
             }
 
@@ -244,7 +249,7 @@ pub async fn track_webreg_enrollment(
             }
 
             // Just to be nice to webreg
-            tokio::time::sleep(Duration::from_secs((TERMS.len() * BASE_COOLDOWN) as u64)).await;
+            tokio::time::sleep(Duration::from_secs_f64(TERMS.len() as f64 * BASE_COOLDOWN)).await;
         }
     }
 
