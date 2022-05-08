@@ -1,5 +1,5 @@
 use crate::util::{get_epoch_time, get_pretty_time};
-use crate::{tracker, BASE_COOLDOWN, TERMS};
+use crate::{tracker, RESET_COOLDOWN};
 use serde_json::Value;
 use std::fs::OpenOptions;
 use std::io::{BufWriter, Write};
@@ -226,7 +226,7 @@ pub async fn track_webreg_enrollment(
                             c.section_code,
                             c.section_id,
                             // Every instructor name (except staff) has a comma
-                            c.instructor.join(" & ").replace(",", ";"),
+                            c.instructors.join(" & ").replace(',', ";"),
                             c.available_seats,
                             c.waitlist_ct,
                             c.total_seats,
@@ -249,7 +249,7 @@ pub async fn track_webreg_enrollment(
             }
 
             // Just to be nice to webreg
-            tokio::time::sleep(Duration::from_secs_f64(TERMS.len() as f64 * BASE_COOLDOWN)).await;
+            tokio::time::sleep(Duration::from_secs_f64(RESET_COOLDOWN)).await;
         }
     }
 
