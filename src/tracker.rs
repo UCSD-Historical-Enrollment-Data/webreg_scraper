@@ -1,5 +1,5 @@
 use crate::util::{get_epoch_time, get_pretty_time};
-use crate::{tracker, RESET_COOLDOWN};
+use crate::{tracker, TermSetting};
 use serde_json::Value;
 use std::fs::OpenOptions;
 use std::io::{BufWriter, Write};
@@ -22,11 +22,8 @@ const TIMEOUT: [u64; 3] = [8 * 60, 6 * 60, 4 * 60];
 ///
 /// # Parameters
 /// - `w`: The wrapper.
-/// - `cookie_url`: The URL to the API where new cookies can be requested. If none
-/// is specified, then this will automatically terminate upon any issue with the
-/// tracker.
-/// - `term`: The term associated with this tracker.
-pub async fn run_tracker(w: Arc<Mutex<WebRegWrapper<'_>>>, cookie_url: Option<&str>, term: &str) {
+/// - `s`: The settings for the term associated with the wrapper.
+pub async fn run_tracker(w: Arc<Mutex<WebRegWrapper<'_>>>, s: &TermSetting<'_>) {
     // In case the given cookies were invalid, if this variable is false, we skip the
     // initial delay and immediately try to fetch the cookies.
     let mut first_passed = false;
@@ -34,18 +31,15 @@ pub async fn run_tracker(w: Arc<Mutex<WebRegWrapper<'_>>>, cookie_url: Option<&s
         tracker::track_webreg_enrollment(
             &w,
             &SearchRequestBuilder::new()
-                .add_subject("CSE")
-                .add_subject("COGS")
-                .add_subject("MATH")
-                .add_subject("ECE")
                 .filter_courses_by(CourseLevelFilter::LowerDivision)
-                .filter_courses_by(CourseLevelFilter::UpperDivision),
-            term,
+                .filter_courses_by(CourseLevelFilter::UpperDivision)
+                .filter_courses_by(CourseLevelFilter::Graduate),
+            s,
         )
         .await;
 
         // If we're here, this means something went wrong.
-        if cookie_url.is_none() {
+        if s.recovery_url.is_none() {
             break;
         }
 
@@ -55,7 +49,7 @@ pub async fn run_tracker(w: Arc<Mutex<WebRegWrapper<'_>>>, cookie_url: Option<&s
             if first_passed {
                 println!(
                     "[{}] [{}] Taking a {} second break.",
-                    term,
+                    s.term,
                     get_pretty_time(),
                     time
                 );
@@ -66,7 +60,7 @@ pub async fn run_tracker(w: Arc<Mutex<WebRegWrapper<'_>>>, cookie_url: Option<&s
 
             // Get new cookies.
             let new_cookie_str = {
-                match reqwest::get(cookie_url.unwrap()).await {
+                match reqwest::get(s.recovery_url.unwrap()).await {
                     Ok(t) => {
                         let txt = t.text().await.unwrap_or_default();
                         let json: Value = serde_json::from_str(&txt).unwrap_or_default();
@@ -103,7 +97,7 @@ pub async fn run_tracker(w: Arc<Mutex<WebRegWrapper<'_>>>, cookie_url: Option<&s
         break;
     }
 
-    println!("[{}] [{}] Quitting.", term, get_pretty_time());
+    println!("[{}] [{}] Quitting.", s.term, get_pretty_time());
 }
 
 /// Tracks WebReg for enrollment information. This will continuously check specific courses for
@@ -113,17 +107,17 @@ pub async fn run_tracker(w: Arc<Mutex<WebRegWrapper<'_>>>, cookie_url: Option<&s
 /// # Parameters
 /// - `wrapper`: The wrapper.
 /// - `search_res`: The courses to search for.
-/// - `term`: The term associated with this tracker.
+/// - `setting`: The settings for this term.
 pub async fn track_webreg_enrollment(
     wrapper: &Arc<Mutex<WebRegWrapper<'_>>>,
     search_res: &SearchRequestBuilder<'_>,
-    term: &str,
+    setting: &TermSetting<'_>,
 ) {
     // If the wrapper doesn't have a valid cookie, then return.
     if !wrapper.lock().await.is_valid().await {
         eprintln!(
             "[{}] [{}] Initial instance is not valid. Returning.",
-            term,
+            setting.term,
             get_pretty_time()
         );
 
@@ -133,7 +127,7 @@ pub async fn track_webreg_enrollment(
     let file_name = format!(
         "enrollment_{}_{}.csv",
         chrono::offset::Local::now().format("%FT%H_%M_%S"),
-        term
+        setting.term
     );
     let is_new = !Path::new(&file_name).exists();
 
@@ -166,7 +160,7 @@ pub async fn track_webreg_enrollment(
         if results.is_empty() {
             eprintln!(
                 "[{}] [{}] No courses found. Exiting.",
-                term,
+                setting.term,
                 get_pretty_time()
             );
             break;
@@ -174,7 +168,7 @@ pub async fn track_webreg_enrollment(
 
         println!(
             "[{}] [{}] Found {} results successfully.",
-            term,
+            setting.term,
             get_pretty_time(),
             results.len()
         );
@@ -183,7 +177,7 @@ pub async fn track_webreg_enrollment(
             if fail_count != 0 && fail_count > 12 {
                 eprintln!(
                     "[{}] [{}] Too many failures when trying to request data from WebReg.",
-                    term,
+                    setting.term,
                     get_pretty_time()
                 );
                 break 'main;
@@ -200,7 +194,7 @@ pub async fn track_webreg_enrollment(
                     fail_count += 1;
                     eprintln!(
                         "[{}] [{}] An error occurred ({}). Skipping. (FAIL_COUNT: {})",
-                        term,
+                        setting.term,
                         get_pretty_time(),
                         e,
                         fail_count
@@ -210,7 +204,7 @@ pub async fn track_webreg_enrollment(
                     fail_count = 0;
                     println!(
                         "[{}] [{}] Processing {} section(s) for {}.",
-                        term,
+                        setting.term,
                         get_pretty_time(),
                         r.len(),
                         r[0].subj_course_id
@@ -239,7 +233,7 @@ pub async fn track_webreg_enrollment(
                     fail_count += 1;
                     eprintln!(
                         "[{}] [{}] Course {} {} not found. Were you logged out? (FAIL_COUNT: {}).",
-                        term,
+                        setting.term,
                         get_pretty_time(),
                         r.subj_code,
                         r.course_code,
@@ -248,8 +242,8 @@ pub async fn track_webreg_enrollment(
                 }
             }
 
-            // Just to be nice to webreg
-            tokio::time::sleep(Duration::from_secs_f64(RESET_COOLDOWN)).await;
+            // Sleep between requests so we don't get ourselves banned by webreg
+            tokio::time::sleep(Duration::from_secs_f64(setting.cooldown)).await;
         }
     }
 

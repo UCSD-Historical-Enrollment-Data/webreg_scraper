@@ -20,35 +20,70 @@ use std::time::Duration;
 use tokio::sync::Mutex;
 use webweg::webreg_wrapper::{Output, SearchRequestBuilder, SearchType, WebRegWrapper};
 
-/// All terms and their associated "recovery URLs"
-pub const TERMS: [[&str; 2]; 3] = [
-    ["S122", "http://localhost:3001/cookie"],
-    ["S222", "http://localhost:3002/cookie"],
-    ["S322", "http://localhost:3003/cookie"],
-];
-
-/// The cooldown, in seconds. The overall cooldown will be given by BASE_COOLDOWN * TERMS.len().
-pub const BASE_COOLDOWN: f64 = 1.5;
-pub const RESET_COOLDOWN: f64 = 6.0;
-
 const VERSION: &str = env!("CARGO_PKG_VERSION");
+
+/// The interval to start each instance. In other words, the number of seconds between starting
+/// two scrapers.
+pub const STARTUP_COOLDOWN: f64 = 1.5;
+
+pub struct TermSetting<'a> {
+    /// The term.
+    term: &'a str,
+
+    /// The recovery URL, i.e., the URL the wrapper should
+    /// make a request to so it can get new cookies to login
+    /// with.
+    recovery_url: Option<&'a str>,
+
+    /// The cooldown, if any, between requests. If none is
+    /// specified, then this will use the default cooldown.
+    cooldown: f64,
+}
+
+/// All terms and their associated "recovery URLs"
+pub const TERMS: [TermSetting<'static>; 4] = [
+    TermSetting {
+        term: "FA22",
+        recovery_url: Some("http://localhost:3000/cookie"),
+        cooldown: 0.5,
+    },
+    TermSetting {
+        term: "S122",
+        recovery_url: Some("http://localhost:3001/cookie"),
+        cooldown: 6.0,
+    },
+    TermSetting {
+        term: "S222",
+        recovery_url: Some("http://localhost:3002/cookie"),
+        cooldown: 6.0,
+    },
+    TermSetting {
+        term: "S322",
+        recovery_url: Some("http://localhost:3003/cookie"),
+        cooldown: 6.0,
+    },
+];
 
 struct WebRegHandler<'a> {
     wrapper: Arc<Mutex<WebRegWrapper<'a>>>,
-    terms_index: usize,
+    term_setting: &'a TermSetting<'a>,
 }
 
+// Init all wrappers here.
 static WEBREG_WRAPPERS: Lazy<HashMap<&str, WebRegHandler>> = Lazy::new(|| {
     let mut map: HashMap<&str, WebRegHandler> = HashMap::new();
 
-    for (i, [term, _]) in TERMS.iter().enumerate() {
-        let cookie = get_cookies(term);
+    for term_setting in TERMS.iter() {
+        let cookie = get_cookies(term_setting.term);
         let cookie = cookie.trim();
         map.insert(
-            term,
+            term_setting.term,
             WebRegHandler {
-                wrapper: Arc::new(Mutex::new(WebRegWrapper::new(cookie.to_string(), term))),
-                terms_index: i,
+                wrapper: Arc::new(Mutex::new(WebRegWrapper::new(
+                    cookie.to_string(),
+                    term_setting.term,
+                ))),
+                term_setting,
             },
         );
     }
@@ -56,8 +91,6 @@ static WEBREG_WRAPPERS: Lazy<HashMap<&str, WebRegHandler>> = Lazy::new(|| {
     map
 });
 
-// When I feel like everything's good enough, I'll probably make this into
-// a better interface for general users.
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<(), Box<dyn Error>> {
     println!("WebRegWrapper Version {}\n", VERSION);
@@ -66,18 +99,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
     for (_, wg_handler) in WEBREG_WRAPPERS.iter() {
         let clone = wg_handler.wrapper.clone();
         handles.push(tokio::spawn(async move {
-            run_tracker(
-                clone,
-                match TERMS[wg_handler.terms_index][1] {
-                    x if x.is_empty() => None,
-                    y => Some(y),
-                },
-                TERMS[wg_handler.terms_index][0],
-            )
-            .await;
+            run_tracker(clone, wg_handler.term_setting).await;
         }));
 
-        tokio::time::sleep(Duration::from_secs_f64(BASE_COOLDOWN)).await;
+        tokio::time::sleep(Duration::from_secs_f64(STARTUP_COOLDOWN)).await;
     }
 
     rocket::build()

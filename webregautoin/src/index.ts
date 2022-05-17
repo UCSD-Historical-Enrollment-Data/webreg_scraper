@@ -16,10 +16,10 @@ import * as http from "http";
 // <option value="THIS">Some Quarter</option>
 //                ----
 const ALL_TERMS: readonly string[] = [
-    "5200:::SP22",
+    "5250:::FA22",
     "5210:::S122",
     "5220:::S222",
-    "5230:::S322"
+    "5230:::S322",
 ];
 
 function printHelpMessage(): void {
