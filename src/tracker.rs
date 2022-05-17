@@ -7,7 +7,7 @@ use std::path::Path;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::Mutex;
-use webweg::webreg_wrapper::{CourseLevelFilter, SearchRequestBuilder, SearchType, WebRegWrapper};
+use webweg::webreg_wrapper::{SearchType, WebRegWrapper};
 
 #[cfg(debug_assertions)]
 const TIMEOUT: [u64; 3] = [5, 10, 15];
@@ -28,15 +28,7 @@ pub async fn run_tracker(w: Arc<Mutex<WebRegWrapper<'_>>>, s: &TermSetting<'_>) 
     // initial delay and immediately try to fetch the cookies.
     let mut first_passed = false;
     loop {
-        tracker::track_webreg_enrollment(
-            &w,
-            &SearchRequestBuilder::new()
-                .filter_courses_by(CourseLevelFilter::LowerDivision)
-                .filter_courses_by(CourseLevelFilter::UpperDivision)
-                .filter_courses_by(CourseLevelFilter::Graduate),
-            s,
-        )
-        .await;
+        tracker::track_webreg_enrollment(&w, s).await;
 
         // If we're here, this means something went wrong.
         if s.recovery_url.is_none() {
@@ -110,7 +102,6 @@ pub async fn run_tracker(w: Arc<Mutex<WebRegWrapper<'_>>>, s: &TermSetting<'_>) 
 /// - `setting`: The settings for this term.
 pub async fn track_webreg_enrollment(
     wrapper: &Arc<Mutex<WebRegWrapper<'_>>>,
-    search_res: &SearchRequestBuilder<'_>,
     setting: &TermSetting<'_>,
 ) {
     // If the wrapper doesn't have a valid cookie, then return.
@@ -150,10 +141,18 @@ pub async fn track_webreg_enrollment(
     'main: loop {
         writer.flush().unwrap();
         let w = wrapper.lock().await;
-        let results = w
-            .search_courses(SearchType::Advanced(search_res))
-            .await
-            .unwrap_or_default();
+        let mut results = vec![];
+
+        for search_query in &setting.search_query {
+            let mut temp = w
+                .search_courses(SearchType::Advanced(&search_query))
+                .await
+                .unwrap_or_default();
+
+            results.append(&mut temp);
+            tokio::time::sleep(Duration::from_secs(1)).await;
+        }
+
         // Drop the Mutex to unlock it
         drop(w);
 

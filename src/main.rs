@@ -18,7 +18,7 @@ use std::path::Path;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::Mutex;
-use webweg::webreg_wrapper::{Output, SearchRequestBuilder, SearchType, WebRegWrapper};
+use webweg::webreg_wrapper::{CourseLevelFilter, Output, SearchRequestBuilder, SearchType, WebRegWrapper};
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
@@ -38,31 +38,67 @@ pub struct TermSetting<'a> {
     /// The cooldown, if any, between requests. If none is
     /// specified, then this will use the default cooldown.
     cooldown: f64,
+
+    /// The courses to search for this term.
+    search_query: Vec<SearchRequestBuilder<'static>>,
 }
 
 /// All terms and their associated "recovery URLs"
-pub const TERMS: [TermSetting<'static>; 4] = [
-    TermSetting {
-        term: "FA22",
-        recovery_url: Some("http://localhost:3000/cookie"),
-        cooldown: 0.5,
-    },
-    TermSetting {
-        term: "S122",
-        recovery_url: Some("http://localhost:3001/cookie"),
-        cooldown: 6.0,
-    },
-    TermSetting {
-        term: "S222",
-        recovery_url: Some("http://localhost:3002/cookie"),
-        cooldown: 6.0,
-    },
-    TermSetting {
-        term: "S322",
-        recovery_url: Some("http://localhost:3003/cookie"),
-        cooldown: 6.0,
-    },
-];
+pub static TERMS: Lazy<Vec<TermSetting<'static>>> = Lazy::new(|| {
+    // Scuffed workaround for the fact that I forgot to implement the clone trait
+    // for searchrequestbuilder
+    let get_def_search = || {
+        vec![
+            SearchRequestBuilder::new()
+                .add_subject("CSE")
+                .add_subject("COGS")
+                .add_subject("MATH")
+                .add_subject("ECE")
+                .filter_courses_by(CourseLevelFilter::LowerDivision)
+                .filter_courses_by(CourseLevelFilter::UpperDivision),
+        ]
+    };
+
+
+    vec![
+        TermSetting {
+            term: "FA22",
+            recovery_url: Some("http://localhost:3000/cookie"),
+            cooldown: 0.5,
+            search_query: vec![
+                // For fall, we want *all* lower- and upper-division courses
+                SearchRequestBuilder::new()
+                    .filter_courses_by(CourseLevelFilter::LowerDivision)
+                    .filter_courses_by(CourseLevelFilter::UpperDivision),
+                // But only graduate math/cse/ece/cogs courses
+                SearchRequestBuilder::new()
+                    .filter_courses_by(CourseLevelFilter::Graduate)
+                    .add_department("MATH")
+                    .add_department("CSE")
+                    .add_department("ECE")
+                    .add_department("COGS")
+            ]
+        },
+        TermSetting {
+            term: "S122",
+            recovery_url: Some("http://localhost:3001/cookie"),
+            cooldown: 6.0,
+            search_query: get_def_search(),
+        },
+        TermSetting {
+            term: "S222",
+            recovery_url: Some("http://localhost:3002/cookie"),
+            cooldown: 6.0,
+            search_query: get_def_search(),
+        },
+        TermSetting {
+            term: "S322",
+            recovery_url: Some("http://localhost:3003/cookie"),
+            cooldown: 6.0,
+            search_query: get_def_search()
+        },
+    ]
+});
 
 struct WebRegHandler<'a> {
     wrapper: Arc<Mutex<WebRegWrapper<'a>>>,
