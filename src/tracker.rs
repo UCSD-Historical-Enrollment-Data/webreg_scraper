@@ -1,5 +1,5 @@
 use crate::util::{get_epoch_time, get_pretty_time};
-use crate::{tracker, TermSetting};
+use crate::{tracker, TermSetting, WebRegHandler};
 use serde_json::Value;
 use std::fs::OpenOptions;
 use std::io::{BufWriter, Write};
@@ -22,16 +22,16 @@ const TIMEOUT: [u64; 3] = [8 * 60, 6 * 60, 4 * 60];
 ///
 /// # Parameters
 /// - `w`: The wrapper.
-/// - `s`: The settings for the term associated with the wrapper.
-pub async fn run_tracker(w: Arc<Mutex<WebRegWrapper<'_>>>, s: &TermSetting<'_>) {
+/// - `s`: The wrapper handler.
+pub async fn run_tracker(s: &WebRegHandler<'_>) {
     // In case the given cookies were invalid, if this variable is false, we skip the
     // initial delay and immediately try to fetch the cookies.
     let mut first_passed = false;
     loop {
-        tracker::track_webreg_enrollment(&w, s).await;
+        tracker::track_webreg_enrollment(&s.scraper_wrapper, s.term_setting).await;
 
         // If we're here, this means something went wrong.
-        if s.recovery_url.is_none() {
+        if s.term_setting.recovery_url.is_none() {
             break;
         }
 
@@ -41,7 +41,7 @@ pub async fn run_tracker(w: Arc<Mutex<WebRegWrapper<'_>>>, s: &TermSetting<'_>) 
             if first_passed {
                 println!(
                     "[{}] [{}] Taking a {} second break.",
-                    s.term,
+                    s.term_setting.term,
                     get_pretty_time(),
                     time
                 );
@@ -52,7 +52,7 @@ pub async fn run_tracker(w: Arc<Mutex<WebRegWrapper<'_>>>, s: &TermSetting<'_>) 
 
             // Get new cookies.
             let new_cookie_str = {
-                match reqwest::get(s.recovery_url.unwrap()).await {
+                match reqwest::get(s.term_setting.recovery_url.unwrap()).await {
                     Ok(t) => {
                         let txt = t.text().await.unwrap_or_default();
                         let json: Value = serde_json::from_str(&txt).unwrap_or_default();
@@ -74,7 +74,8 @@ pub async fn run_tracker(w: Arc<Mutex<WebRegWrapper<'_>>>, s: &TermSetting<'_>) 
                     continue;
                 }
 
-                w.lock().await.set_cookies(c);
+                s.scraper_wrapper.lock().await.set_cookies(c.clone());
+                s.general_wrapper.lock().await.set_cookies(c);
                 success = true;
                 break;
             }
@@ -89,7 +90,7 @@ pub async fn run_tracker(w: Arc<Mutex<WebRegWrapper<'_>>>, s: &TermSetting<'_>) 
         break;
     }
 
-    println!("[{}] [{}] Quitting.", s.term, get_pretty_time());
+    println!("[{}] [{}] Quitting.", s.term_setting.term, get_pretty_time());
 }
 
 /// Tracks WebReg for enrollment information. This will continuously check specific courses for

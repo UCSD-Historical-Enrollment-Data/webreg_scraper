@@ -6,6 +6,7 @@ mod util;
 
 use crate::tracker::run_tracker;
 use once_cell::sync::Lazy;
+use reqwest::Client;
 use rocket::response::content;
 use rocket::serde::json::Json;
 use rocket::serde::{Deserialize, Serialize};
@@ -17,9 +18,10 @@ use std::fs;
 use std::path::Path;
 use std::sync::Arc;
 use std::time::Duration;
-use reqwest::Client;
 use tokio::sync::Mutex;
-use webweg::webreg_wrapper::{CourseLevelFilter, Output, SearchRequestBuilder, SearchType, WebRegWrapper};
+use webweg::webreg_wrapper::{
+    CourseLevelFilter, Output, SearchRequestBuilder, SearchType, WebRegWrapper,
+};
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
@@ -49,23 +51,20 @@ pub static TERMS: Lazy<Vec<TermSetting<'static>>> = Lazy::new(|| {
     // Scuffed workaround for the fact that I forgot to implement the clone trait
     // for searchrequestbuilder
     let get_def_search = || {
-        vec![
-            SearchRequestBuilder::new()
-                .add_subject("CSE")
-                .add_subject("COGS")
-                .add_subject("MATH")
-                .add_subject("ECE")
-                .filter_courses_by(CourseLevelFilter::LowerDivision)
-                .filter_courses_by(CourseLevelFilter::UpperDivision),
-        ]
+        vec![SearchRequestBuilder::new()
+            .add_subject("CSE")
+            .add_subject("COGS")
+            .add_subject("MATH")
+            .add_subject("ECE")
+            .filter_courses_by(CourseLevelFilter::LowerDivision)
+            .filter_courses_by(CourseLevelFilter::UpperDivision)]
     };
-
 
     vec![
         TermSetting {
             term: "FA22",
             recovery_url: Some("http://localhost:3000/cookie"),
-            cooldown: 0.5,
+            cooldown: 5.,
             search_query: vec![
                 // For fall, we want *all* lower- and upper-division courses
                 SearchRequestBuilder::new()
@@ -77,8 +76,8 @@ pub static TERMS: Lazy<Vec<TermSetting<'static>>> = Lazy::new(|| {
                     .add_department("MATH")
                     .add_department("CSE")
                     .add_department("ECE")
-                    .add_department("COGS")
-            ]
+                    .add_department("COGS"),
+            ],
         },
         TermSetting {
             term: "S122",
@@ -96,13 +95,19 @@ pub static TERMS: Lazy<Vec<TermSetting<'static>>> = Lazy::new(|| {
             term: "S322",
             recovery_url: Some("http://localhost:3003/cookie"),
             cooldown: 6.0,
-            search_query: get_def_search()
+            search_query: get_def_search(),
         },
     ]
 });
 
-struct WebRegHandler<'a> {
-    wrapper: Arc<Mutex<WebRegWrapper<'a>>>,
+pub struct WebRegHandler<'a> {
+    /// Wrapper for the scraper.
+    scraper_wrapper: Arc<Mutex<WebRegWrapper<'a>>>,
+
+    /// Wrapper for general requests made inbound by, say, a Discord bot.
+    general_wrapper: Arc<Mutex<WebRegWrapper<'a>>>,
+
+    /// The term settings.
     term_setting: &'a TermSetting<'a>,
 }
 
@@ -116,7 +121,12 @@ static WEBREG_WRAPPERS: Lazy<HashMap<&str, WebRegHandler>> = Lazy::new(|| {
         map.insert(
             term_setting.term,
             WebRegHandler {
-                wrapper: Arc::new(Mutex::new(WebRegWrapper::new(
+                scraper_wrapper: Arc::new(Mutex::new(WebRegWrapper::new(
+                    Client::new(),
+                    cookie.to_string(),
+                    term_setting.term,
+                ))),
+                general_wrapper: Arc::new(Mutex::new(WebRegWrapper::new(
                     Client::new(),
                     cookie.to_string(),
                     term_setting.term,
@@ -135,21 +145,60 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     let mut handles = vec![];
     for (_, wg_handler) in WEBREG_WRAPPERS.iter() {
-        let clone = wg_handler.wrapper.clone();
         handles.push(tokio::spawn(async move {
-            run_tracker(clone, wg_handler.term_setting).await;
+            // wg_handler has a static lifetime, so we can do this just fine.
+            run_tracker(wg_handler).await;
         }));
 
         tokio::time::sleep(Duration::from_secs_f64(STARTUP_COOLDOWN)).await;
     }
 
-    let _ =rocket::build()
+    let _ = rocket::build()
         .mount("/", routes![get_course_info])
         .launch()
         .await
         .unwrap();
 
     Ok(())
+}
+
+#[inline(always)]
+fn process_return<T>(search_res: Output<T>) -> content::RawJson<String>
+where
+    T: Serialize,
+{
+    match search_res {
+        Ok(x) => content::RawJson(serde_json::to_string(&x).unwrap_or_else(|_| "[]".to_string())),
+        Err(e) => content::RawJson(json!({ "error": e }).to_string()),
+    }
+}
+
+#[get("/course/<term>/<subj>/<num>")]
+async fn get_course_info(term: String, subj: String, num: String) -> content::RawJson<String> {
+    if let Some(wg_handler) = WEBREG_WRAPPERS.get(&term.as_str()) {
+        let wg_handler = wg_handler.general_wrapper.lock().await;
+        let res = wg_handler.get_course_info(&subj, &num).await;
+        drop(wg_handler);
+        process_return(res)
+    } else {
+        content::RawJson(
+            json!({
+                "error": "Invalid term specified."
+            })
+            .to_string(),
+        )
+    }
+}
+
+fn get_cookies(term: &str) -> String {
+    let file_name = format!("cookie_{}.txt", term);
+    let file = Path::new(&file_name);
+    if !file.exists() {
+        eprintln!("'{}' file does not exist. Try again.", file_name);
+        return "".to_string();
+    }
+
+    fs::read_to_string(file).unwrap_or_else(|_| "".to_string())
 }
 
 #[derive(Debug, PartialEq, Eq, Deserialize)]
@@ -193,7 +242,7 @@ async fn search_courses(term: String, query: Json<SearchQuery>) -> content::RawJ
             query_builder = query_builder.only_allow_open();
         }
 
-        let wg_handler = wg_handler.wrapper.lock().await;
+        let wg_handler = wg_handler.general_wrapper.lock().await;
         let search_res = wg_handler
             .search_courses(SearchType::Advanced(&query_builder))
             .await;
@@ -202,43 +251,4 @@ async fn search_courses(term: String, query: Json<SearchQuery>) -> content::RawJ
     }
 
     content::RawJson(json!({"error": "Invalid term specified"}).to_string())
-}
-
-#[inline(always)]
-fn process_return<T>(search_res: Output<T>) -> content::RawJson<String>
-where
-    T: Serialize,
-{
-    match search_res {
-        Ok(x) => content::RawJson(serde_json::to_string(&x).unwrap_or_else(|_| "[]".to_string())),
-        Err(e) => content::RawJson(json!({ "error": e }).to_string()),
-    }
-}
-
-#[get("/course/<term>/<subj>/<num>")]
-async fn get_course_info(term: String, subj: String, num: String) -> content::RawJson<String> {
-    if let Some(wg_handler) = WEBREG_WRAPPERS.get(&term.as_str()) {
-        let wg_handler = wg_handler.wrapper.lock().await;
-        let res = wg_handler.get_course_info(&subj, &num).await;
-        drop(wg_handler);
-        process_return(res)
-    } else {
-        content::RawJson(
-            json!({
-                "error": "Invalid term specified."
-            })
-            .to_string(),
-        )
-    }
-}
-
-fn get_cookies(term: &str) -> String {
-    let file_name = format!("cookie_{}.txt", term);
-    let file = Path::new(&file_name);
-    if !file.exists() {
-        eprintln!("'{}' file does not exist. Try again.", file_name);
-        return "".to_string();
-    }
-
-    fs::read_to_string(file).unwrap_or_else(|_| "".to_string())
 }
