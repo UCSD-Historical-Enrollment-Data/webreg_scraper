@@ -64,7 +64,7 @@ pub static TERMS: Lazy<Vec<TermSetting<'static>>> = Lazy::new(|| {
         TermSetting {
             term: "FA22",
             recovery_url: Some("http://localhost:3000/cookie"),
-            cooldown: 5.,
+            cooldown: 0.5,
             search_query: vec![
                 // For fall, we want *all* lower- and upper-division courses
                 SearchRequestBuilder::new()
