@@ -17,6 +17,7 @@ use std::fs;
 use std::path::Path;
 use std::sync::Arc;
 use std::time::Duration;
+use reqwest::Client;
 use tokio::sync::Mutex;
 use webweg::webreg_wrapper::{CourseLevelFilter, Output, SearchRequestBuilder, SearchType, WebRegWrapper};
 
@@ -116,6 +117,7 @@ static WEBREG_WRAPPERS: Lazy<HashMap<&str, WebRegHandler>> = Lazy::new(|| {
             term_setting.term,
             WebRegHandler {
                 wrapper: Arc::new(Mutex::new(WebRegWrapper::new(
+                    Client::new(),
                     cookie.to_string(),
                     term_setting.term,
                 ))),
@@ -141,7 +143,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         tokio::time::sleep(Duration::from_secs_f64(STARTUP_COOLDOWN)).await;
     }
 
-    rocket::build()
+    let _ =rocket::build()
         .mount("/", routes![get_course_info])
         .launch()
         .await
@@ -161,7 +163,7 @@ struct SearchQuery {
 }
 
 #[post("/search/<term>", format = "json", data = "<query>")]
-async fn search_courses(term: String, query: Json<SearchQuery>) -> content::Json<String> {
+async fn search_courses(term: String, query: Json<SearchQuery>) -> content::RawJson<String> {
     // kek I didn't realize how scuffed this was
     if let Some(wg_handler) = WEBREG_WRAPPERS.get(&term.as_str()) {
         let mut query_builder = SearchRequestBuilder::new();
@@ -199,29 +201,29 @@ async fn search_courses(term: String, query: Json<SearchQuery>) -> content::Json
         return process_return(search_res);
     }
 
-    content::Json(json!({"error": "Invalid term specified"}).to_string())
+    content::RawJson(json!({"error": "Invalid term specified"}).to_string())
 }
 
 #[inline(always)]
-fn process_return<T>(search_res: Output<T>) -> content::Json<String>
+fn process_return<T>(search_res: Output<T>) -> content::RawJson<String>
 where
     T: Serialize,
 {
     match search_res {
-        Ok(x) => content::Json(serde_json::to_string(&x).unwrap_or_else(|_| "[]".to_string())),
-        Err(e) => content::Json(json!({ "error": e }).to_string()),
+        Ok(x) => content::RawJson(serde_json::to_string(&x).unwrap_or_else(|_| "[]".to_string())),
+        Err(e) => content::RawJson(json!({ "error": e }).to_string()),
     }
 }
 
 #[get("/course/<term>/<subj>/<num>")]
-async fn get_course_info(term: String, subj: String, num: String) -> content::Json<String> {
+async fn get_course_info(term: String, subj: String, num: String) -> content::RawJson<String> {
     if let Some(wg_handler) = WEBREG_WRAPPERS.get(&term.as_str()) {
         let wg_handler = wg_handler.wrapper.lock().await;
         let res = wg_handler.get_course_info(&subj, &num).await;
         drop(wg_handler);
         process_return(res)
     } else {
-        content::Json(
+        content::RawJson(
             json!({
                 "error": "Invalid term specified."
             })
