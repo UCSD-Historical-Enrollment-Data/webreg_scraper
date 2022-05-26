@@ -22,6 +22,8 @@ const ALL_TERMS: readonly string[] = [
     "5230:::S322",
 ];
 
+const NUM_ATTEMPTS_BEFORE_EXIT: number = 6;
+
 function printHelpMessage(): void {
     console.error("Usage: node index.js <term> <port>");
     console.error(`\tWhere <term> can be one of: ${ALL_TERMS.map(x => x.split(":::")[1]).join(", ")}.`);
@@ -101,155 +103,179 @@ async function getCookies(): Promise<string> {
         });
     }
 
-    // Close any unnecessary pages. 
-    let pages = await BROWSER.pages();
-    while (pages.length > 1) {
-        await pages.at(-1)!.close();
-        pages = await BROWSER.pages();
-    }
-
-    const page = await BROWSER.newPage();
-    try {
-        log("Opened new page. Attempting to connect to WebReg site.")
-        const resp = await page.goto(WEBREG_URL);
-        log(`Reached ${resp.url()} with status code ${resp.status()}.`);
-        if (resp.status() < 200 || resp.status() >= 300) {
-            throw new Error("Non-OK Status Code Returned.");
+    let numFailedAttempts = 0;
+    while (true) {
+        // Close any unnecessary pages. 
+        let pages = await BROWSER.pages();
+        while (pages.length > 1) {
+            await pages.at(-1)!.close();
+            pages = await BROWSER.pages();
         }
-    }
-    catch (e) {
-        // Timed out probably, or failed to get page for some reason.
-        log(`An error occurred. Returning empty string. See error stack trace below.`);
-        console.info(e);
-        console.info();
-        return "";
-    }
 
-    await waitFor(3000);
-    const content = await page.content();
-    // This assumes that the credentials are valid.
-    if (content.includes("Signing on Using:") && content.includes("TritonLink user name")) {
-        log("Attempting to sign in to TritonLink.");
-        // https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_Selectors
-        await page.type('#ssousername', CONFIG.username);
-        await page.type('#ssopassword', CONFIG.password);
-        await page.click('button[type="submit"]');
-    }
+        const page = await BROWSER.newPage();
+        try {
+            log("Opened new page. Attempting to connect to WebReg site.")
+            const resp = await page.goto(WEBREG_URL);
+            log(`Reached ${resp.url()} with status code ${resp.status()}.`);
+            if (resp.status() < 200 || resp.status() >= 300) {
+                throw new Error("Non-OK Status Code Returned.");
+            }
+        }
+        catch (e) {
+            // Timed out probably, or failed to get page for some reason.
+            log(`An error occurred. Returning empty string. See error stack trace below.`);
+            console.info(e);
+            console.info();
+            return "";
+        }
 
-    // Wait for either Duo 2FA frame (if we need 2FA) or "Go" button (if no 2FA needed) to show up
-    log("Waiting for Duo 2FA frame or 'Go' button to show up.");
+        await waitFor(3000);
+        const content = await page.content();
+        // This assumes that the credentials are valid.
+        if (content.includes("Signing on Using:") && content.includes("TritonLink user name")) {
+            log("Attempting to sign in to TritonLink.");
+            // https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_Selectors
+            await page.type('#ssousername', CONFIG.username);
+            await page.type('#ssopassword', CONFIG.password);
+            await page.click('button[type="submit"]');
+        }
 
-    let loggedIn = false;
-    const r = await Promise.race([
-        // Either wait for the 'Go' button to show up, which implies that we
-        // have an authenticated session.
-        (async () => {
-            await page.waitForSelector("#startpage-button-go", { visible: true, timeout: 30 * 1000 });
-            return 0;
-        })(),
-        // Or, we *repeatedly* check to see if the Duo 2FA frame is visible AND some components of
-        // the frame (in our case, the "Rememebr Me" checkbox) are visible.
-        (async () => {
-            const interval = await new Promise<NodeJS.Timeout>(r => {
-                const internalInterval = setInterval(async () => {
-                    try {
-                        // If we're logged in, then we can stop the interval.
-                        if (loggedIn) {
+        // Wait for either Duo 2FA frame (if we need 2FA) or "Go" button (if no 2FA needed) to show up
+        log("Waiting for Duo 2FA frame or 'Go' button to show up.");
+
+        
+        let loggedIn = false;
+        const r = await Promise.race([
+            // Either wait for the 'Go' button to show up, which implies that we
+            // have an authenticated session. If an error occurred, this means 
+            // that we couldn't find the button for some reason.
+            (async () => {
+                try {
+                    await page.waitForSelector("#startpage-button-go", { visible: true, timeout: 30 * 1000 });
+                } catch (_) {
+                    // conveniently ignore the error
+                    return 2;
+                }
+                return 0;
+            })(),
+            // Or, we *repeatedly* check to see if the Duo 2FA frame is visible AND some components of
+            // the frame (in our case, the "Rememebr Me" checkbox) are visible.
+            (async () => {
+                const interval = await new Promise<NodeJS.Timeout>(r => {
+                    const internalInterval = setInterval(async () => {
+                        try {
+                            // If we're logged in, then we can stop the interval.
+                            if (loggedIn) {
+                                r(internalInterval);
+                                return;
+                            }
+
+                            const possDuoFrame = await page.$("iframe[id='duo_iframe']");
+                            if (!possDuoFrame) {
+                                return;
+                            }
+
+                            const duoFrame = await possDuoFrame.contentFrame();
+                            if (!duoFrame) {
+                                return;
+                            }
+
+                            if (!(await duoFrame.$("#remember_me_label_text"))) {
+                                return;
+                            }
+
                             r(internalInterval);
-                            return;
                         }
-
-                        const possDuoFrame = await page.$("iframe[id='duo_iframe']");
-                        if (!possDuoFrame) {
-                            return;
+                        catch (e) {
+                            // Conveniently ignore the error
                         }
+                    }, 500);
+                });
 
-                        const duoFrame = await possDuoFrame.contentFrame();
-                        if (!duoFrame) {
-                            return;
-                        }
+                clearInterval(interval);
+                return 1;
+            })()
+        ]);
 
-                        if (!(await duoFrame.$("#remember_me_label_text"))) {
-                            return;
-                        }
+        // If we hit this, then we just try again.
+        if (r === 2) {
+            // If too many failed attempts, then notify the caller.
+            if (numFailedAttempts >= NUM_ATTEMPTS_BEFORE_EXIT) {
+                log("Unable to authenticate due to too many attempts reached, giving up.")
+                return "ERROR UNABLE TO AUTHENTICATE.";
+            }
 
-                        r(internalInterval);
-                    }
-                    catch (e) {
-                        // Conveniently ignore the error
-                    }
-                }, 1000);
-            });
+            loggedIn = true;
+            numFailedAttempts++;
+            log(`Unable to find a 'Go' button or Duo 2FA frame. Retrying (${numFailedAttempts}/${NUM_ATTEMPTS_BEFORE_EXIT}).`);
+            continue; 
+        }
 
-            clearInterval(interval);
-            return 1;
-        })()
-    ]);
+        log(
+            r === 0
+                ? "'Go' button found. No 2FA needed."
+                : "Duo 2FA frame found. Ignore the initial 2FA request; i.e. do not"
+                + " accept the 2FA request until you are told to do so."
+        );
 
-    log(
-        r === 0
-            ? "'Go' button found. No 2FA needed."
-            : "Duo 2FA frame found. Ignore the initial 2FA request; i.e. do not"
-            + " accept the 2FA request until you are told to do so."
-    );
+        if (r === 0) {
+            loggedIn = true;
+        }
 
-    if (r === 0) {
-        loggedIn = true;
+        // Wait an additional 4 seconds to make sure everything loads up.
+        await waitFor(4 * 1000);
+
+        // No go button means we need to log in.
+        if (!(await page.$("#startpage-button-go"))) {
+            log("Beginning Duo 2FA process. Do not accept yet.");
+            // Need to find a duo iframe so we can actually authenticate 
+            const possDuoFrame = await page.$("iframe[id='duo_iframe']");
+            if (!possDuoFrame) {
+                log("No possible Duo frame found. Returning empty string.");
+                console.info();
+                return "";
+            }
+
+            const duoFrame = await possDuoFrame.contentFrame();
+            if (!duoFrame) {
+                log("Duo frame not attached. Returning empty string.");
+                console.info();
+                return "";
+            }
+
+            // it's possible that we might need to cancel our existing authentication request,
+            // especially if we have duo push automatically send upon logging in
+            await waitFor(1000);
+            const cancelButton = await duoFrame.$(".btn-cancel");
+            if (cancelButton) {
+                await cancelButton.click();
+                log("Clicked the CANCEL button to cancel initial 2FA request. Do not respond to 2FA request.");
+            }
+
+            await waitFor(1000);
+            // Remember me for 7 days
+            await duoFrame.click('#remember_me_label_text');
+            log("Checked the 'Remember me for 7 days' box.");
+            await waitFor(1000);
+            // Send me a push 
+            await duoFrame.click('#auth_methods > fieldset > div.row-label.push-label > button');
+            log("A Duo push was sent. Please respond to the new 2FA request.");
+        }
+
+        await Promise.all([
+            page.waitForSelector("#startpage-select-term", { visible: true }),
+            page.waitForSelector('#startpage-button-go', { visible: true })
+        ]);
+        log("Logged into WebReg successfully.");
+
+        await page.select("#startpage-select-term", termToUse!);
+        const term = termToUse!.split(":::").at(-1) ?? "";
+        // Get cookies ready to load.
+        await page.click('#startpage-button-go');
+        const cookies = await page.cookies(`https://act.ucsd.edu/webreg2/svc/wradapter/secure/sched-get-schednames?termcode=${term}`);
+        log(`Extracted cookies for term '${term}' and responding back with them.\n`);
+        return cookies.map(x => `${x.name}=${x.value}`).join("; ");
     }
-
-    // Wait an additional 4 seconds to make sure everything loads up.
-    await waitFor(4 * 1000);
-
-    // No go button means we need to log in.
-    if (!(await page.$("#startpage-button-go"))) {
-        log("Beginning Duo 2FA process. Do not accept yet.");
-        // Need to find a duo iframe so we can actually authenticate 
-        const possDuoFrame = await page.$("iframe[id='duo_iframe']");
-        if (!possDuoFrame) {
-            log("No possible Duo frame found. Returning empty string.");
-            console.info();
-            return "";
-        }
-
-        const duoFrame = await possDuoFrame.contentFrame();
-        if (!duoFrame) {
-            log("Duo frame not attached. Returning empty string.");
-            console.info();
-            return "";
-        }
-
-        // it's possible that we might need to cancel our existing authentication request,
-        // especially if we have duo push automatically send upon logging in
-        await waitFor(1000);
-        const cancelButton = await duoFrame.$(".btn-cancel");
-        if (cancelButton) {
-            await cancelButton.click();
-            log("Clicked the CANCEL button to cancel initial 2FA request. Do not respond to 2FA request.");
-        }
-
-        await waitFor(1000);
-        // Remember me for 7 days
-        await duoFrame.click('#remember_me_label_text');
-        log("Checked the 'Remember me for 7 days' box.");
-        await waitFor(1000);
-        // Send me a push 
-        await duoFrame.click('#auth_methods > fieldset > div.row-label.push-label > button');
-        log("A Duo push was sent. Please respond to the new 2FA request.");
-    }
-
-    await Promise.all([
-        page.waitForSelector("#startpage-select-term", { visible: true }),
-        page.waitForSelector('#startpage-button-go', { visible: true })
-    ]);
-    log("Logged into WebReg successfully.");
-
-    await page.select("#startpage-select-term", termToUse!);
-    const term = termToUse!.split(":::").at(-1) ?? "";
-    // Get cookies ready to load.
-    await page.click('#startpage-button-go');
-    const cookies = await page.cookies(`https://act.ucsd.edu/webreg2/svc/wradapter/secure/sched-get-schednames?termcode=${term}`);
-    log(`Extracted cookies for term '${term}' and responding back with them.\n`);
-    return cookies.map(x => `${x.name}=${x.value}`).join("; ");
 }
 
 // Very basic server. 
