@@ -16,7 +16,6 @@ use std::collections::HashMap;
 use std::error::Error;
 use std::fs;
 use std::path::Path;
-use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::Mutex;
 use webweg::webreg_wrapper::{
@@ -50,6 +49,7 @@ pub struct TermSetting<'a> {
 pub static TERMS: Lazy<Vec<TermSetting<'static>>> = Lazy::new(|| {
     // Scuffed workaround for the fact that I forgot to implement the clone trait
     // for searchrequestbuilder
+    #[cfg(not(debug_assertions))]
     let get_def_search = || {
         vec![SearchRequestBuilder::new()
             .add_subject("CSE")
@@ -64,7 +64,12 @@ pub static TERMS: Lazy<Vec<TermSetting<'static>>> = Lazy::new(|| {
         TermSetting {
             term: "FA22",
             recovery_url: Some("http://localhost:3000/cookie"),
+
+            #[cfg(debug_assertions)]
+            cooldown: 6.0,
+            #[cfg(not(debug_assertions))]
             cooldown: 0.5,
+
             search_query: vec![
                 // For fall, we want *all* lower- and upper-division courses
                 SearchRequestBuilder::new()
@@ -79,18 +84,22 @@ pub static TERMS: Lazy<Vec<TermSetting<'static>>> = Lazy::new(|| {
                     .add_department("COGS"),
             ],
         },
+        // Only want these if we're in release mode.
+        #[cfg(not(debug_assertions))]
         TermSetting {
             term: "S122",
             recovery_url: Some("http://localhost:3001/cookie"),
             cooldown: 6.0,
             search_query: get_def_search(),
         },
+        #[cfg(not(debug_assertions))]
         TermSetting {
             term: "S222",
             recovery_url: Some("http://localhost:3002/cookie"),
             cooldown: 6.0,
             search_query: get_def_search(),
         },
+        #[cfg(not(debug_assertions))]
         TermSetting {
             term: "S322",
             recovery_url: Some("http://localhost:3003/cookie"),
@@ -102,10 +111,10 @@ pub static TERMS: Lazy<Vec<TermSetting<'static>>> = Lazy::new(|| {
 
 pub struct WebRegHandler<'a> {
     /// Wrapper for the scraper.
-    scraper_wrapper: Arc<Mutex<WebRegWrapper<'a>>>,
+    scraper_wrapper: Mutex<WebRegWrapper<'a>>,
 
     /// Wrapper for general requests made inbound by, say, a Discord bot.
-    general_wrapper: Arc<Mutex<WebRegWrapper<'a>>>,
+    general_wrapper: Mutex<WebRegWrapper<'a>>,
 
     /// The term settings.
     term_setting: &'a TermSetting<'a>,
@@ -121,16 +130,16 @@ static WEBREG_WRAPPERS: Lazy<HashMap<&str, WebRegHandler>> = Lazy::new(|| {
         map.insert(
             term_setting.term,
             WebRegHandler {
-                scraper_wrapper: Arc::new(Mutex::new(WebRegWrapper::new(
+                scraper_wrapper: Mutex::new(WebRegWrapper::new(
                     Client::new(),
                     cookie.to_string(),
                     term_setting.term,
-                ))),
-                general_wrapper: Arc::new(Mutex::new(WebRegWrapper::new(
+                )),
+                general_wrapper: Mutex::new(WebRegWrapper::new(
                     Client::new(),
                     cookie.to_string(),
                     term_setting.term,
-                ))),
+                )),
                 term_setting,
             },
         );

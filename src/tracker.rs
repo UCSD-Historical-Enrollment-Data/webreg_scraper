@@ -4,7 +4,6 @@ use serde_json::Value;
 use std::fs::OpenOptions;
 use std::io::{BufWriter, Write};
 use std::path::Path;
-use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::Mutex;
 use webweg::webreg_wrapper::{SearchType, WebRegWrapper};
@@ -90,7 +89,11 @@ pub async fn run_tracker(s: &WebRegHandler<'_>) {
         break;
     }
 
-    println!("[{}] [{}] Quitting.", s.term_setting.term, get_pretty_time());
+    println!(
+        "[{}] [{}] Quitting.",
+        s.term_setting.term,
+        get_pretty_time()
+    );
 }
 
 /// Tracks WebReg for enrollment information. This will continuously check specific courses for
@@ -102,7 +105,7 @@ pub async fn run_tracker(s: &WebRegHandler<'_>) {
 /// - `search_res`: The courses to search for.
 /// - `setting`: The settings for this term.
 pub async fn track_webreg_enrollment(
-    wrapper: &Arc<Mutex<WebRegWrapper<'_>>>,
+    wrapper: &Mutex<WebRegWrapper<'_>>,
     setting: &TermSetting<'_>,
 ) {
     // If the wrapper doesn't have a valid cookie, then return.
