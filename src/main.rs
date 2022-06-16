@@ -154,7 +154,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     let mut handles = vec![];
     for (_, wg_handler) in WEBREG_WRAPPERS.iter() {
-        handles.push(tokio::spawn(async move {
+        handles.push(tokio::spawn(async move { 
             // wg_handler has a static lifetime, so we can do this just fine.
             run_tracker(wg_handler).await;
         }));

@@ -1,5 +1,5 @@
 [package]
-name = "ucsd_webreg_rs"
+name = "webreg_scraper"
 version = "0.3.4"
 edition = "2021"
 
