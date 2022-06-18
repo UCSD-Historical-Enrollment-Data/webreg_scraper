@@ -1,12 +1,18 @@
 use crate::util::{get_epoch_time, get_pretty_time};
 use crate::{tracker, TermSetting, WebRegHandler};
+use chrono::Local;
 use serde_json::Value;
-use std::fs::OpenOptions;
+use std::collections::HashMap;
+use std::fs::{File, OpenOptions};
 use std::io::{BufWriter, Write};
+use std::iter::Sum;
+use std::ops::Add;
 use std::path::Path;
 use std::time::Duration;
 use tokio::sync::Mutex;
 use webweg::webreg_wrapper::{SearchType, WebRegWrapper};
+
+const CLEANED_CSV_HEADER: &str = "time,enrolled,available,waitlisted,total";
 
 #[cfg(debug_assertions)]
 const TIMEOUT: [u64; 3] = [5, 10, 15];
@@ -22,12 +28,12 @@ const TIMEOUT: [u64; 3] = [8 * 60, 6 * 60, 4 * 60];
 /// # Parameters
 /// - `w`: The wrapper.
 /// - `s`: The wrapper handler.
-pub async fn run_tracker(s: &WebRegHandler<'_>) {
+pub async fn run_tracker(s: &WebRegHandler<'_>, end_loc: String) {
     // In case the given cookies were invalid, if this variable is false, we skip the
     // initial delay and immediately try to fetch the cookies.
     let mut first_passed = false;
     loop {
-        tracker::track_webreg_enrollment(&s.scraper_wrapper, s.term_setting).await;
+        tracker::track_webreg_enrollment(&s.scraper_wrapper, s.term_setting, &end_loc).await;
 
         // If we're here, this means something went wrong.
         if s.term_setting.recovery_url.is_none() {
@@ -102,11 +108,13 @@ pub async fn run_tracker(s: &WebRegHandler<'_>) {
 ///
 /// # Parameters
 /// - `wrapper`: The wrapper.
-/// - `search_res`: The courses to search for.
 /// - `setting`: The settings for this term.
+/// - `end_location`: The end location for the cleaned CSV files. Just the base location will
+///   suffice.
 pub async fn track_webreg_enrollment(
     wrapper: &Mutex<WebRegWrapper<'_>>,
     setting: &TermSetting<'_>,
+    end_location: &str,
 ) {
     // If the wrapper doesn't have a valid cookie, then return.
     if !wrapper.lock().await.is_valid().await {
@@ -125,6 +133,9 @@ pub async fn track_webreg_enrollment(
         setting.term
     );
     let is_new = !Path::new(&file_name).exists();
+    // Map where the key is the course subj + number (e.g., CSE 30)
+    // and the value is the associated CSV file which will be written to.
+    let mut file_map: HashMap<String, File> = HashMap::new();
 
     let f = OpenOptions::new()
         .append(true)
@@ -149,7 +160,7 @@ pub async fn track_webreg_enrollment(
 
         for search_query in &setting.search_query {
             let mut temp = w
-                .search_courses(SearchType::Advanced(&search_query))
+                .search_courses(SearchType::Advanced(search_query))
                 .await
                 .unwrap_or_default();
 
@@ -213,8 +224,11 @@ pub async fn track_webreg_enrollment(
                         r[0].subj_course_id
                     );
 
+                    let course_subj_id = r[0].subj_course_id.clone();
                     let time = get_epoch_time();
-                    r.into_iter().for_each(|c| {
+                    let time_formatted = Local::now().format("%Y-%m-%dT%H:%M:%S").to_string();
+                    // Write to raw CSV dataset
+                    r.iter().for_each(|c| {
                         writeln!(
                             writer,
                             "{},{},{},{},{},{},{},{},{}",
@@ -231,6 +245,49 @@ pub async fn track_webreg_enrollment(
                         )
                         .unwrap()
                     });
+
+                    // Pre-processing all of the files
+                    let path_overall = Path::new(end_location)
+                        .join(setting.term)
+                        .join("overall")
+                        .join(&format!("{}.csv", course_subj_id));
+
+                    let exists_overall = path_overall.exists();
+
+                    // Now write to the file
+                    let file = file_map.entry(course_subj_id.clone()).or_insert_with(|| {
+                        OpenOptions::new()
+                            .append(true)
+                            .create(true)
+                            .open(&path_overall)
+                            .unwrap_or_else(|_| {
+                                panic!("could not open or create '{}'", path_overall.display())
+                            })
+                    });
+                    // If the overall file doesn't exist, write the csv header
+                    if !exists_overall {
+                        writeln!(file, "{}", CLEANED_CSV_HEADER).unwrap();
+                    }
+
+                    // Calculate total seats and all of that here
+                    let overall: CourseStat = r
+                        .iter()
+                        .map(|x| {
+                            CourseStat(
+                                x.enrolled_ct,
+                                x.available_seats,
+                                x.waitlist_ct,
+                                x.total_seats,
+                            )
+                        })
+                        .sum();
+
+                    writeln!(
+                        file,
+                        "{},{},{},{},{}",
+                        time_formatted, overall.0, overall.1, overall.2, overall.3
+                    )
+                    .unwrap();
                 }
                 _ => {
                     fail_count += 1;
@@ -251,4 +308,26 @@ pub async fn track_webreg_enrollment(
     }
 
     writer.flush().unwrap();
+}
+
+#[derive(Clone, Copy, Default)]
+struct CourseStat(i64, i64, i64, i64);
+
+impl Add<CourseStat> for CourseStat {
+    type Output = CourseStat;
+
+    fn add(self, rhs: CourseStat) -> Self::Output {
+        CourseStat(
+            self.0 + rhs.0,
+            self.1 + rhs.1,
+            self.2 + rhs.2,
+            self.3 + rhs.3,
+        )
+    }
+}
+
+impl Sum for CourseStat {
+    fn sum<I: Iterator<Item = Self>>(iter: I) -> Self {
+        iter.reduce(|prev, next| prev + next).unwrap_or_default()
+    }
 }

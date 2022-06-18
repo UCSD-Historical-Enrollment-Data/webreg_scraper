@@ -1,10 +1,13 @@
 #![allow(dead_code)]
 mod export;
+mod git;
 mod schedule;
 mod tracker;
 mod util;
 
+use crate::git::GitManager;
 use crate::tracker::run_tracker;
+use chrono::Local;
 use once_cell::sync::Lazy;
 use reqwest::Client;
 use rocket::response::content;
@@ -14,9 +17,9 @@ use rocket::{get, post, routes};
 use serde_json::json;
 use std::collections::HashMap;
 use std::error::Error;
-use std::fs;
 use std::path::Path;
 use std::time::Duration;
+use std::{fs, thread};
 use tokio::sync::Mutex;
 use webweg::webreg_wrapper::{
     CourseLevelFilter, Output, SearchRequestBuilder, SearchType, WebRegWrapper,
@@ -125,7 +128,7 @@ static WEBREG_WRAPPERS: Lazy<HashMap<&str, WebRegHandler>> = Lazy::new(|| {
     let mut map: HashMap<&str, WebRegHandler> = HashMap::new();
 
     for term_setting in TERMS.iter() {
-        let cookie = get_cookies(term_setting.term);
+        let cookie = get_file_content(&format!("cookie_{}.txt", term_setting.term));
         let cookie = cookie.trim();
         map.insert(
             term_setting.term,
@@ -152,15 +155,41 @@ static WEBREG_WRAPPERS: Lazy<HashMap<&str, WebRegHandler>> = Lazy::new(|| {
 async fn main() -> Result<(), Box<dyn Error>> {
     println!("WebRegWrapper Version {}\n", VERSION);
 
-    let mut handles = vec![];
+    // Location to store the cleaned CSV files. For example, if the base folder
+    // that we want to save these files to is `../UCSDEnrollmentData` (with child
+    // directories, say, `UCSDEnrollmentData/FA22`, `UCSDEnrollmentData/SP22`,
+    // etc.), then we would just have `../UCSDEnrollmentData`.
+    let clean_loc = get_file_content("clean.txt");
+    if clean_loc.is_empty() {
+        // exit process
+        panic!();
+    }
+
     for (_, wg_handler) in WEBREG_WRAPPERS.iter() {
-        handles.push(tokio::spawn(async move { 
+        let loc = clean_loc.clone();
+        tokio::spawn(async move {
             // wg_handler has a static lifetime, so we can do this just fine.
-            run_tracker(wg_handler).await;
-        }));
+            run_tracker(wg_handler, loc).await;
+        });
 
         tokio::time::sleep(Duration::from_secs_f64(STARTUP_COOLDOWN)).await;
     }
+
+    // Spawn a thread to handle git pull/push, since Command::new()...status()
+    // is a blocking call which can potentially cause problems if we're pulling
+    // or pushing a *lot* of files.
+    thread::spawn(move || {
+        let loc = clean_loc;
+        let git = GitManager::new(Path::new(&loc));
+        loop {
+            thread::sleep(Duration::from_secs(20 * 60 * 1000));
+            git.pull_files();
+            git.add_all_files();
+            let commit_msg = Local::now().format("%B %d, %Y").to_string();
+            git.commit_files(&format!("{} - update datasets (automated)", commit_msg));
+            git.push_files();
+        }
+    });
 
     let _ = rocket::build()
         .mount("/", routes![get_course_info])
@@ -199,9 +228,8 @@ async fn get_course_info(term: String, subj: String, num: String) -> content::Ra
     }
 }
 
-fn get_cookies(term: &str) -> String {
-    let file_name = format!("cookie_{}.txt", term);
-    let file = Path::new(&file_name);
+fn get_file_content(file_name: &str) -> String {
+    let file = Path::new(file_name);
     if !file.exists() {
         eprintln!("'{}' file does not exist. Try again.", file_name);
         return "".to_string();
