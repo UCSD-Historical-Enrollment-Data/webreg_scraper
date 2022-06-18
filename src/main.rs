@@ -165,6 +165,13 @@ async fn main() -> Result<(), Box<dyn Error>> {
         panic!();
     }
 
+    let path = Path::new(&clean_loc);
+    if !path.exists() {
+        panic!("Path {} does not exist. Please create the directory and any associated child directories.", 
+            path.display());
+    }
+    println!("Set path for clean data: {}", path.display());
+
     for (_, wg_handler) in WEBREG_WRAPPERS.iter() {
         let loc = clean_loc.clone();
         tokio::spawn(async move {
@@ -178,21 +185,24 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // Spawn a thread to handle git pull/push, since Command::new()...status()
     // is a blocking call which can potentially cause problems if we're pulling
     // or pushing a *lot* of files.
-    thread::spawn(move || {
-        let loc = clean_loc;
-        let git = GitManager::new(Path::new(&loc));
-        loop {
-            thread::sleep(Duration::from_secs(20 * 60 * 1000));
-            git.pull_files();
-            git.add_all_files();
-            let commit_msg = Local::now().format("%B %d, %Y").to_string();
-            git.commit_files(&format!("{} - update datasets (automated)", commit_msg));
-            git.push_files();
-        }
-    });
+    #[cfg(not(debug_assertions))]
+    {
+        thread::spawn(move || {
+            let loc = clean_loc;
+            let git = GitManager::new(Path::new(&loc));
+            loop {
+                thread::sleep(Duration::from_secs(20 * 60 * 1000));
+                git.pull_files();
+                git.add_all_files();
+                let commit_msg = Local::now().format("%B %d, %Y").to_string();
+                git.commit_files(&format!("{} - update datasets (automated)", commit_msg));
+                git.push_files();
+            }
+        });
+    }
 
     let _ = rocket::build()
-        .mount("/", routes![get_course_info])
+        .mount("/", routes![get_course_info, search_courses])
         .launch()
         .await
         .unwrap();
