@@ -1,4 +1,7 @@
-use std::{path::Path, process::Command};
+use std::{
+    path::Path,
+    process::{Command, Stdio},
+};
 
 pub struct GitManager<'p> {
     pub dir: &'p Path,
@@ -24,6 +27,8 @@ impl<'p> GitManager<'p> {
         match Command::new("git")
             .arg("pull")
             .current_dir(self.dir)
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
             .status()
         {
             Ok(o) => o.success(),
@@ -41,6 +46,8 @@ impl<'p> GitManager<'p> {
             .arg("add")
             .arg("-A")
             .current_dir(self.dir)
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
             .status()
         {
             Ok(o) => o.success(),
@@ -60,8 +67,10 @@ impl<'p> GitManager<'p> {
         match Command::new("git")
             .arg("commit")
             .arg("-m")
-            .arg(format!("\"{}\"", commit_msg))
+            .arg(commit_msg)
             .current_dir(self.dir)
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
             .status()
         {
             Ok(o) => o.success(),
@@ -77,6 +86,8 @@ impl<'p> GitManager<'p> {
         match Command::new("git")
             .arg("push")
             .current_dir(self.dir)
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
             .status()
         {
             Ok(o) => o.success(),

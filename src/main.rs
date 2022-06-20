@@ -7,6 +7,7 @@ mod util;
 
 use crate::git::GitManager;
 use crate::tracker::run_tracker;
+use crate::util::get_pretty_time;
 use chrono::Local;
 use once_cell::sync::Lazy;
 use reqwest::Client;
@@ -69,10 +70,19 @@ pub static TERMS: Lazy<Vec<TermSetting<'static>>> = Lazy::new(|| {
             recovery_url: Some("http://localhost:3000/cookie"),
 
             #[cfg(debug_assertions)]
-            cooldown: 6.0,
+            cooldown: 3.0,
             #[cfg(not(debug_assertions))]
-            cooldown: 0.5,
+            cooldown: 0.42,
 
+            #[cfg(debug_assertions)]
+            search_query: vec![SearchRequestBuilder::new()
+                .filter_courses_by(CourseLevelFilter::LowerDivision)
+                .filter_courses_by(CourseLevelFilter::UpperDivision)
+                .add_department("MATH")
+                .add_department("CSE")
+                .add_department("COGS")],
+
+            #[cfg(not(debug_assertions))]
             search_query: vec![
                 // For fall, we want *all* lower- and upper-division courses
                 SearchRequestBuilder::new()
@@ -185,21 +195,20 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // Spawn a thread to handle git pull/push, since Command::new()...status()
     // is a blocking call which can potentially cause problems if we're pulling
     // or pushing a *lot* of files.
-    #[cfg(not(debug_assertions))]
-    {
-        thread::spawn(move || {
-            let loc = clean_loc;
-            let git = GitManager::new(Path::new(&loc));
-            loop {
-                thread::sleep(Duration::from_secs(20 * 60 * 1000));
-                git.pull_files();
-                git.add_all_files();
-                let commit_msg = Local::now().format("%B %d, %Y").to_string();
-                git.commit_files(&format!("{} - update datasets (automated)", commit_msg));
-                git.push_files();
-            }
-        });
-    }
+    thread::spawn(move || {
+        let loc = clean_loc;
+        let git = GitManager::new(Path::new(&loc));
+        loop {
+            thread::sleep(Duration::from_secs(5 * 60));
+            println!("[GIT] [{}] Running Git service.", get_pretty_time());
+            git.pull_files();
+            git.add_all_files();
+            let commit_msg = Local::now().format("%B %d, %Y at %I:%M:%S %p").to_string();
+            git.commit_files(&format!("{} - Update (Automated)", commit_msg));
+            git.push_files();
+            println!("[GIT] [{}] Git service finished..", get_pretty_time());
+        }
+    });
 
     let _ = rocket::build()
         .mount("/", routes![get_course_info, search_courses])
