@@ -22,3 +22,13 @@ pub fn get_pretty_time() -> DelayedFormat<StrftimeItems<'static>> {
 pub fn get_epoch_time() -> i64 {
     chrono::offset::Local::now().timestamp_millis()
 }
+
+#[macro_export]
+macro_rules! cfg_feature_git {
+    ($($item:item)*) => {
+        $(
+            #[cfg(feature = "git_repeat")]
+            $item
+        )*
+    }
+}

@@ -1,8 +1,8 @@
+use crate::cfg_feature_git;
 use crate::util::{get_epoch_time, get_pretty_time};
 use crate::{tracker, TermSetting, WebRegHandler};
-use chrono::Local;
 use serde_json::Value;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::fs::{File, OpenOptions};
 use std::io::{BufWriter, Write};
 use std::iter::Sum;
@@ -11,6 +11,11 @@ use std::path::Path;
 use std::time::Duration;
 use tokio::sync::Mutex;
 use webweg::webreg_wrapper::{SearchType, WebRegWrapper};
+
+cfg_feature_git! {
+    use std::collections::HashSet;
+    use chrono::Local;
+}
 
 const CLEANED_CSV_HEADER: &str = "time,enrolled,available,waitlisted,total";
 
@@ -41,12 +46,16 @@ const TIMEOUT: [u64; 10] = [
 /// # Parameters
 /// - `w`: The wrapper.
 /// - `s`: The wrapper handler.
-pub async fn run_tracker(s: &WebRegHandler<'_>, end_loc: String) {
+pub async fn run_tracker(s: &WebRegHandler<'_>, #[cfg(feature = "git_repeat")] end_loc: String) {
     // In case the given cookies were invalid, if this variable is false, we skip the
     // initial delay and immediately try to fetch the cookies.
     let mut first_passed = false;
     loop {
+        #[cfg(feature = "git_repeat")]
         tracker::track_webreg_enrollment(&s.scraper_wrapper, s.term_setting, &end_loc).await;
+
+        #[cfg(not(feature = "git_repeat"))]
+        tracker::track_webreg_enrollment(&s.scraper_wrapper, s.term_setting).await;
 
         // If we're here, this means something went wrong.
         if s.term_setting.recovery_url.is_none() {
@@ -127,7 +136,7 @@ pub async fn run_tracker(s: &WebRegHandler<'_>, end_loc: String) {
 pub async fn track_webreg_enrollment(
     wrapper: &Mutex<WebRegWrapper<'_>>,
     setting: &TermSetting<'_>,
-    end_location: &str,
+    #[cfg(feature = "git_repeat")] end_location: &str,
 ) {
     // If the wrapper doesn't have a valid cookie, then return.
     if !wrapper.lock().await.is_valid().await {
@@ -148,6 +157,7 @@ pub async fn track_webreg_enrollment(
     let is_new = !Path::new(&file_name).exists();
     // Map where the key is the course subj + number (e.g., CSE 30)
     // and the value is the associated CSV file which will be written to.
+    #[cfg(feature = "git_repeat")]
     let mut file_map: HashMap<String, CourseFile> = HashMap::new();
 
     let f = OpenOptions::new()
@@ -237,9 +247,7 @@ pub async fn track_webreg_enrollment(
                         r[0].subj_course_id
                     );
 
-                    let course_subj_id = r[0].subj_course_id.clone();
                     let time = get_epoch_time();
-                    let time_formatted = Local::now().format("%Y-%m-%dT%H:%M:%S").to_string();
                     // Write to raw CSV dataset
                     r.iter().for_each(|c| {
                         writeln!(
@@ -259,153 +267,160 @@ pub async fn track_webreg_enrollment(
                         .unwrap()
                     });
 
-                    // Assume that all course/subject IDs are well-formed (e.g., CSE 100).
-                    let (subj, _) = course_subj_id.split_once(' ').unwrap_or(("UNKNOWN", ""));
-                    // Create the base paths.
-                    let base_overall_path = Path::new(end_location)
-                        .join(setting.term)
-                        .join("overall")
-                        .join(subj);
-                    let base_section_path = Path::new(end_location)
-                        .join(setting.term)
-                        .join("section")
-                        .join(subj);
-                    if !base_overall_path.exists() {
-                        let _ = std::fs::create_dir_all(&base_overall_path);
-                    }
+                    #[cfg(feature = "git_repeat")]
+                    {
+                        let course_subj_id = r[0].subj_course_id.clone();
+                        let time_formatted = Local::now().format("%Y-%m-%dT%H:%M:%S").to_string();
 
-                    if !base_section_path.exists() {
-                        let _ = std::fs::create_dir_all(&base_section_path);
-                    }
-
-                    // Pre-processing all of the files
-                    let path_overall =
-                        Path::new(&base_overall_path).join(&format!("{}.csv", course_subj_id));
-
-                    let exists_overall = path_overall.exists();
-
-                    // Now write to the file
-                    let file =
-                        file_map
-                            .entry(course_subj_id.clone())
-                            .or_insert_with(|| CourseFile {
-                                overall_file: OpenOptions::new()
-                                    .append(true)
-                                    .create(true)
-                                    .open(&path_overall)
-                                    .unwrap_or_else(|_| {
-                                        panic!(
-                                            "could not open or create '{}'",
-                                            path_overall.display()
-                                        )
-                                    }),
-                                section_files: HashMap::new(),
-                            });
-                    // If the overall file doesn't exist, write the csv header
-                    if !exists_overall {
-                        writeln!(file.overall_file, "{}", CLEANED_CSV_HEADER).unwrap();
-                    }
-
-                    // Calculate total seats across all sctions here
-                    let overall_data: CourseStat = r
-                        .iter()
-                        .map(|x| {
-                            CourseStat(
-                                x.enrolled_ct,
-                                x.available_seats,
-                                x.waitlist_ct,
-                                x.total_seats,
-                            )
-                        })
-                        .sum();
-
-                    writeln!(
-                        file.overall_file,
-                        "{},{},{},{},{}",
-                        time_formatted,
-                        overall_data.0,
-                        overall_data.1,
-                        overall_data.2,
-                        overall_data.3
-                    )
-                    .unwrap();
-
-                    // Okay, let's do the same thing for sections
-                    let mut section_data: HashMap<String, CourseStat> = HashMap::new();
-                    for data in r {
-                        // Either the section has code X__, where X is a letter and __ are digits
-                        // or the section has code ___, where ___ are digits.
-                        //
-                        // For the former, we group all sections by their X section (section "family"). So,
-                        // for example, section A01, A02, A03 would be calcuated together under "A."
-                        //
-                        // For the latter, we group them individually by their section number. So, for
-                        // example, section 001, 002, 003 would be calculated individually.
-                        let key = if data.section_code.as_bytes()[0].is_ascii_alphabetic() {
-                            data.section_code[..1].to_string()
-                        } else {
-                            data.section_code.to_string()
-                        };
-
-                        *section_data.entry(key).or_insert_with(CourseStat::default) += CourseStat(
-                            data.enrolled_ct,
-                            data.available_seats,
-                            data.waitlist_ct,
-                            data.total_seats,
-                        );
-                    }
-
-                    // We now need to figure out what files to add or remove to file.section_files.
-                    // We can use some neat set theory for this.
-                    // 
-                    // Suppose that
-                    //              A' = {A, B, C}
-                    // is the set of all sections that we already have in file.section_files, and
-                    //              B' - {A, B, C, D}
-                    // is the set of all sections that we recently just fetched.
-                    //
-                    // Then,
-                    //              B' \ A' = {D}
-                    // is the set of all files that we need to add (i.e., sections that were added)
-                    if section_data.len() > 1 {
-                        let a = file.section_files.keys().clone().collect::<HashSet<_>>();
-                        let b = section_data.keys().clone().collect::<HashSet<_>>();
-
-                        let mut to_add = HashMap::new();
-
-                        for sec_to_add in b.difference(&a) {
-                            let path_sec = Path::new(&base_section_path)
-                                .join(&format!("{}_{}.csv", course_subj_id, sec_to_add));
-                            let exists = path_sec.exists();
-                            let mut file_to_use = OpenOptions::new()
-                                .append(true)
-                                .create(true)
-                                .open(&path_sec)
-                                .unwrap_or_else(|_| {
-                                    panic!("could not open or create '{}'", path_sec.display())
-                                });
-
-                            if !exists {
-                                writeln!(file_to_use, "{}", CLEANED_CSV_HEADER).unwrap();
-                            }
-
-                            to_add.insert(sec_to_add.to_string(), file_to_use);
+                        // Assume that all course/subject IDs are well-formed (e.g., CSE 100).
+                        let (subj, _) = course_subj_id.split_once(' ').unwrap_or(("UNKNOWN", ""));
+                        // Create the base paths.
+                        let base_overall_path = Path::new(end_location)
+                            .join(setting.term)
+                            .join("overall")
+                            .join(subj);
+                        let base_section_path = Path::new(end_location)
+                            .join(setting.term)
+                            .join("section")
+                            .join(subj);
+                        if !base_overall_path.exists() {
+                            let _ = std::fs::create_dir_all(&base_overall_path);
                         }
 
-                        file.section_files.extend(to_add.into_iter());
+                        if !base_section_path.exists() {
+                            let _ = std::fs::create_dir_all(&base_section_path);
+                        }
 
-                        // then write data
-                        for (k, v) in section_data {
-                            writeln!(
-                                file.section_files.get_mut(&k).unwrap(),
-                                "{},{},{},{},{}",
-                                time_formatted,
-                                v.0,
-                                v.1,
-                                v.2,
-                                v.3
-                            )
-                            .unwrap();
+                        // Pre-processing all of the files
+                        let path_overall =
+                            Path::new(&base_overall_path).join(&format!("{}.csv", course_subj_id));
+
+                        let exists_overall = path_overall.exists();
+
+                        // Now write to the file
+                        let file =
+                            file_map
+                                .entry(course_subj_id.clone())
+                                .or_insert_with(|| CourseFile {
+                                    overall_file: OpenOptions::new()
+                                        .append(true)
+                                        .create(true)
+                                        .open(&path_overall)
+                                        .unwrap_or_else(|_| {
+                                            panic!(
+                                                "could not open or create '{}'",
+                                                path_overall.display()
+                                            )
+                                        }),
+                                    section_files: HashMap::new(),
+                                });
+                        // If the overall file doesn't exist, write the csv header
+                        if !exists_overall {
+                            writeln!(file.overall_file, "{}", CLEANED_CSV_HEADER).unwrap();
+                        }
+
+                        // Calculate total seats across all sctions here
+                        let overall_data: CourseStat = r
+                            .iter()
+                            .map(|x| {
+                                CourseStat(
+                                    x.enrolled_ct,
+                                    x.available_seats,
+                                    x.waitlist_ct,
+                                    x.total_seats,
+                                )
+                            })
+                            .sum();
+
+                        writeln!(
+                            file.overall_file,
+                            "{},{},{},{},{}",
+                            time_formatted,
+                            overall_data.0,
+                            overall_data.1,
+                            overall_data.2,
+                            overall_data.3
+                        )
+                        .unwrap();
+
+                        // Okay, let's do the same thing for sections
+                        let mut section_data: HashMap<String, CourseStat> = HashMap::new();
+                        for data in r {
+                            // Either the section has code X__, where X is a letter and __ are digits
+                            // or the section has code ___, where ___ are digits.
+                            //
+                            // For the former, we group all sections by their X section (section "family"). So,
+                            // for example, section A01, A02, A03 would be calcuated together under "A."
+                            //
+                            // For the latter, we group them individually by their section number. So, for
+                            // example, section 001, 002, 003 would be calculated individually.
+                            let key = if data.section_code.as_bytes()[0].is_ascii_alphabetic() {
+                                data.section_code[..1].to_string()
+                            } else {
+                                data.section_code.to_string()
+                            };
+
+                            *section_data.entry(key).or_insert_with(CourseStat::default) +=
+                                CourseStat(
+                                    data.enrolled_ct,
+                                    data.available_seats,
+                                    data.waitlist_ct,
+                                    data.total_seats,
+                                );
+                        }
+
+                        // We now need to figure out what files to add or remove to file.section_files.
+                        // We can use some neat set theory for this.
+                        //
+                        // Suppose that
+                        //              A' = {A, B, C}
+                        // is the set of all sections that we already have in file.section_files, and
+                        //              B' - {A, B, C, D}
+                        // is the set of all sections that we recently just fetched.
+                        //
+                        // Then,
+                        //              B' \ A' = {D}
+                        // is the set of all files that we need to add (i.e., sections that were added)
+                        if section_data.len() > 1 {
+                            let a = file.section_files.keys().clone().collect::<HashSet<_>>();
+                            let b = section_data.keys().clone().collect::<HashSet<_>>();
+
+                            let mut to_add = HashMap::new();
+
+                            for sec_to_add in b.difference(&a) {
+                                let path_sec = Path::new(&base_section_path)
+                                    .join(&format!("{}_{}.csv", course_subj_id, sec_to_add));
+                                let exists = path_sec.exists();
+                                let mut file_to_use = OpenOptions::new()
+                                    .append(true)
+                                    .create(true)
+                                    .open(&path_sec)
+                                    .unwrap_or_else(|_| {
+                                        panic!("could not open or create '{}'", path_sec.display())
+                                    });
+
+                                if !exists {
+                                    writeln!(file_to_use, "{}", CLEANED_CSV_HEADER).unwrap();
+                                }
+
+                                to_add.insert(sec_to_add.to_string(), file_to_use);
+                            }
+
+                            file.section_files.extend(to_add.into_iter());
+
+                            // then write data
+                            for (k, v) in section_data {
+                                writeln!(
+                                    file.section_files.get_mut(&k).unwrap(),
+                                    "{},{},{},{},{}",
+                                    time_formatted,
+                                    v.0,
+                                    v.1,
+                                    v.2,
+                                    v.3
+                                )
+                                .unwrap();
+                            }
                         }
                     }
                 }

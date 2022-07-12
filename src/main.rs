@@ -5,10 +5,8 @@ mod schedule;
 mod tracker;
 mod util;
 
-use crate::git::GitManager;
 use crate::tracker::run_tracker;
-use crate::util::get_pretty_time;
-use chrono::Local;
+
 use once_cell::sync::Lazy;
 use reqwest::Client;
 use rocket::response::content;
@@ -18,13 +16,20 @@ use rocket::{get, post, routes};
 use serde_json::json;
 use std::collections::HashMap;
 use std::error::Error;
+use std::fs;
 use std::path::Path;
 use std::time::Duration;
-use std::{fs, thread};
 use tokio::sync::Mutex;
 use webweg::webreg_wrapper::{
     CourseLevelFilter, Output, SearchRequestBuilder, SearchType, WebRegWrapper,
 };
+
+cfg_feature_git! {
+    use crate::git::GitManager;
+    use crate::util::get_pretty_time;
+    use chrono::Local;
+    use std::thread;
+}
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
@@ -163,30 +168,45 @@ static WEBREG_WRAPPERS: Lazy<HashMap<&str, WebRegHandler>> = Lazy::new(|| {
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<(), Box<dyn Error>> {
-    println!("WebRegWrapper Version {}\n", VERSION);
+    println!("WebRegWrapper Version {}", VERSION);
+
+    #[cfg(feature = "git_repeat")]
+    println!("\tUsing Git Auto-Commit.");
 
     // Location to store the cleaned CSV files. For example, if the base folder
     // that we want to save these files to is `../UCSDEnrollmentData` (with child
     // directories, say, `UCSDEnrollmentData/FA22`, `UCSDEnrollmentData/SP22`,
     // etc.), then we would just have `../UCSDEnrollmentData`.
-    let clean_loc = get_file_content("clean.txt");
-    if clean_loc.is_empty() {
-        // exit process
-        panic!();
-    }
+    #[cfg(feature = "git_repeat")]
+    let clean_loc = {
+        let t = get_file_content("clean.txt");
+        if t.is_empty() {
+            // exit process
+            panic!();
+        }
 
-    let path = Path::new(&clean_loc);
-    if !path.exists() {
-        panic!("Path {} does not exist. Please create the directory and any associated child directories.", 
+        t
+    };
+
+    #[cfg(feature = "git_repeat")]
+    {
+        let path = Path::new(&clean_loc);
+        if !path.exists() {
+            panic!("Path {} does not exist. Please create the directory and any associated child directories.", 
             path.display());
+        }
+        println!("Set path for clean data: {}", path.display());
     }
-    println!("Set path for clean data: {}", path.display());
 
     for (_, wg_handler) in WEBREG_WRAPPERS.iter() {
+        #[cfg(feature = "git_repeat")]
         let loc = clean_loc.clone();
         tokio::spawn(async move {
             // wg_handler has a static lifetime, so we can do this just fine.
+            #[cfg(feature = "git_repeat")]
             run_tracker(wg_handler, loc).await;
+            #[cfg(not(feature = "git_repeat"))]
+            run_tracker(wg_handler).await;
         });
 
         tokio::time::sleep(Duration::from_secs_f64(STARTUP_COOLDOWN)).await;
@@ -195,6 +215,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // Spawn a thread to handle git pull/push, since Command::new()...status()
     // is a blocking call which can potentially cause problems if we're pulling
     // or pushing a *lot* of files.
+    #[cfg(feature = "git_repeat")]
     thread::spawn(move || {
         let loc = clean_loc;
         let git = GitManager::new(Path::new(&loc));
@@ -206,7 +227,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
             let commit_msg = Local::now().format("%B %d, %Y at %I:%M:%S %p").to_string();
             git.commit_files(&format!("{} - Update (Automated)", commit_msg));
             git.push_files();
-            println!("[GIT] [{}] Git service finished..", get_pretty_time());
+            println!("[GIT] [{}] Git service finished.", get_pretty_time());
         }
     });
 
