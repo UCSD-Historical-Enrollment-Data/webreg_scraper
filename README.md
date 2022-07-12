@@ -99,6 +99,7 @@ Why does *this* work but not the HTTP client? Well, a *headless browser* acts ju
 
 
 \* - Note that if we couldn't do this, then we would have to resort to waking up every day at 4:30 AM.
+
 \*\* - Closing and reopening our headless browser resets everything due to the way most headless browsers are implemented.
 
 </details>
