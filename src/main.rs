@@ -105,22 +105,8 @@ pub static TERMS: Lazy<Vec<TermSetting<'static>>> = Lazy::new(|| {
         // Only want these if we're in release mode.
         #[cfg(not(debug_assertions))]
         TermSetting {
-            term: "S122",
-            recovery_url: Some("http://localhost:3001/cookie"),
-            cooldown: 6.0,
-            search_query: get_def_search(),
-        },
-        #[cfg(not(debug_assertions))]
-        TermSetting {
             term: "S222",
             recovery_url: Some("http://localhost:3002/cookie"),
-            cooldown: 6.0,
-            search_query: get_def_search(),
-        },
-        #[cfg(not(debug_assertions))]
-        TermSetting {
-            term: "S322",
-            recovery_url: Some("http://localhost:3003/cookie"),
             cooldown: 6.0,
             search_query: get_def_search(),
         },
