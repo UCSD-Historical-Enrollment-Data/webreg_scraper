@@ -38,8 +38,12 @@ const VERSION: &str = env!("CARGO_PKG_VERSION");
 pub const STARTUP_COOLDOWN: f64 = 1.5;
 
 pub struct TermSetting<'a> {
-    /// The term.
+    /// The term, to be recognized by WebReg.
     term: &'a str,
+
+    /// The term alias, to be used for the file name. If `None`, defaults
+    /// to `term`.
+    alias: Option<&'a str>,
 
     /// The recovery URL, i.e., the URL the wrapper should
     /// make a request to so it can get new cookies to login
@@ -72,6 +76,7 @@ pub static TERMS: Lazy<Vec<TermSetting<'static>>> = Lazy::new(|| {
     vec![
         TermSetting {
             term: "FA22",
+            alias: Some("FA22NS"),
             recovery_url: Some("http://localhost:3000/cookie"),
 
             #[cfg(debug_assertions)]
@@ -106,6 +111,7 @@ pub static TERMS: Lazy<Vec<TermSetting<'static>>> = Lazy::new(|| {
         #[cfg(not(debug_assertions))]
         TermSetting {
             term: "S222",
+            alias: Some("S222D"),
             recovery_url: Some("http://localhost:3002/cookie"),
             cooldown: 6.0,
             search_query: get_def_search(),
@@ -209,11 +215,17 @@ async fn main() -> Result<(), Box<dyn Error>> {
             thread::sleep(Duration::from_secs(5 * 60));
             println!("[GIT] [{}] Running Git service.", get_pretty_time());
             git.pull_files();
+            thread::sleep(Duration::from_secs(2));
             git.add_all_files();
+            thread::sleep(Duration::from_secs(2));
+
             let commit_msg = Local::now().format("%B %d, %Y at %I:%M:%S %p").to_string();
             git.commit_files(&format!("{} - Update (Automated)", commit_msg));
+            thread::sleep(Duration::from_secs(2));
+
             git.push_files();
             println!("[GIT] [{}] Git service finished.", get_pretty_time());
+            thread::sleep(Duration::from_secs(2));
         }
     });
 
@@ -242,6 +254,23 @@ async fn get_course_info(term: String, subj: String, num: String) -> content::Ra
     if let Some(wg_handler) = WEBREG_WRAPPERS.get(&term.as_str()) {
         let wg_handler = wg_handler.general_wrapper.lock().await;
         let res = wg_handler.get_course_info(&subj, &num).await;
+        drop(wg_handler);
+        process_return(res)
+    } else {
+        content::RawJson(
+            json!({
+                "error": "Invalid term specified."
+            })
+            .to_string(),
+        )
+    }
+}
+
+#[get("/prereqs/<term>/<subj>/<num>")]
+async fn get_prereqs(term: String, subj: String, num: String) -> content::RawJson<String> {
+    if let Some(wg_handler) = WEBREG_WRAPPERS.get(&term.as_str()) {
+        let wg_handler = wg_handler.general_wrapper.lock().await;
+        let res = wg_handler.get_prereqs(&subj, &num).await;
         drop(wg_handler);
         process_return(res)
     } else {

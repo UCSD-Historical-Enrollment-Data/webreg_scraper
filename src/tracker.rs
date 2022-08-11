@@ -152,7 +152,7 @@ pub async fn track_webreg_enrollment(
     let file_name = format!(
         "enrollment_{}_{}.csv",
         chrono::offset::Local::now().format("%FT%H_%M_%S"),
-        setting.term
+        setting.alias.unwrap_or(setting.term)
     );
     let is_new = !Path::new(&file_name).exists();
     // Map where the key is the course subj + number (e.g., CSE 30)
