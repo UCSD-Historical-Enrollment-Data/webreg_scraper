@@ -230,7 +230,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     });
 
     let _ = rocket::build()
-        .mount("/", routes![get_course_info, search_courses])
+        .mount("/", routes![get_course_info, search_courses, get_prereqs])
         .launch()
         .await
         .unwrap();
