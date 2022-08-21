@@ -73,50 +73,39 @@ pub static TERMS: Lazy<Vec<TermSetting<'static>>> = Lazy::new(|| {
             .filter_courses_by(CourseLevelFilter::UpperDivision)]
     };
 
-    vec![
-        TermSetting {
-            term: "FA22",
-            alias: Some("FA22NS"),
-            recovery_url: Some("http://localhost:3000/cookie"),
+    vec![TermSetting {
+        term: "FA22",
+        alias: Some("FA22NS"),
+        recovery_url: Some("http://localhost:3000/cookie"),
 
-            #[cfg(debug_assertions)]
-            cooldown: 3.0,
-            #[cfg(not(debug_assertions))]
-            cooldown: 0.42,
+        #[cfg(debug_assertions)]
+        cooldown: 3.0,
+        #[cfg(not(debug_assertions))]
+        cooldown: 0.42,
 
-            #[cfg(debug_assertions)]
-            search_query: vec![SearchRequestBuilder::new()
+        #[cfg(debug_assertions)]
+        search_query: vec![SearchRequestBuilder::new()
+            .filter_courses_by(CourseLevelFilter::LowerDivision)
+            .filter_courses_by(CourseLevelFilter::UpperDivision)
+            .add_department("MATH")
+            .add_department("CSE")
+            .add_department("COGS")],
+
+        #[cfg(not(debug_assertions))]
+        search_query: vec![
+            // For fall, we want *all* lower- and upper-division courses
+            SearchRequestBuilder::new()
                 .filter_courses_by(CourseLevelFilter::LowerDivision)
-                .filter_courses_by(CourseLevelFilter::UpperDivision)
+                .filter_courses_by(CourseLevelFilter::UpperDivision),
+            // But only graduate math/cse/ece/cogs courses
+            SearchRequestBuilder::new()
+                .filter_courses_by(CourseLevelFilter::Graduate)
                 .add_department("MATH")
                 .add_department("CSE")
-                .add_department("COGS")],
-
-            #[cfg(not(debug_assertions))]
-            search_query: vec![
-                // For fall, we want *all* lower- and upper-division courses
-                SearchRequestBuilder::new()
-                    .filter_courses_by(CourseLevelFilter::LowerDivision)
-                    .filter_courses_by(CourseLevelFilter::UpperDivision),
-                // But only graduate math/cse/ece/cogs courses
-                SearchRequestBuilder::new()
-                    .filter_courses_by(CourseLevelFilter::Graduate)
-                    .add_department("MATH")
-                    .add_department("CSE")
-                    .add_department("ECE")
-                    .add_department("COGS"),
-            ],
-        },
-        // Only want these if we're in release mode.
-        #[cfg(not(debug_assertions))]
-        TermSetting {
-            term: "S222",
-            alias: Some("S222D"),
-            recovery_url: Some("http://localhost:3002/cookie"),
-            cooldown: 6.0,
-            search_query: get_def_search(),
-        },
-    ]
+                .add_department("ECE")
+                .add_department("COGS"),
+        ],
+    }]
 });
 
 pub struct WebRegHandler<'a> {
