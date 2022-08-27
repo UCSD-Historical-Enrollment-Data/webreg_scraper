@@ -75,7 +75,7 @@ pub static TERMS: Lazy<Vec<TermSetting<'static>>> = Lazy::new(|| {
 
     vec![TermSetting {
         term: "FA22",
-        alias: None,
+        alias: Some("FA22A"),
         recovery_url: Some("http://localhost:3000/cookie"),
 
         #[cfg(debug_assertions)]
