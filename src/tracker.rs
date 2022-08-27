@@ -445,7 +445,8 @@ pub async fn track_webreg_enrollment(
     if !writer.buffer().is_empty() {
         println!(
             "[{}] [{}] Buffer not empty! Buffer has length {}.",
-            setting.term.get_pretty_time(),
+            setting.term,
+            get_pretty_time(),
             writer.buffer().len()
         );
     }
@@ -454,7 +455,8 @@ pub async fn track_webreg_enrollment(
     // Debugging possible issues with the buffer
     println!(
         "[{}] [{}] Buffer flushed. Final buffer length: {}.",
-        setting.term.get_pretty_time(),
+        setting.term,
+        get_pretty_time(),
         writer.buffer().len()
     );
 }

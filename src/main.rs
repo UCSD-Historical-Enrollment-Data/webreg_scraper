@@ -60,19 +60,6 @@ pub struct TermSetting<'a> {
 
 /// All terms and their associated "recovery URLs"
 pub static TERMS: Lazy<Vec<TermSetting<'static>>> = Lazy::new(|| {
-    // Scuffed workaround for the fact that I forgot to implement the clone trait
-    // for searchrequestbuilder
-    #[cfg(not(debug_assertions))]
-    let get_def_search = || {
-        vec![SearchRequestBuilder::new()
-            .add_subject("CSE")
-            .add_subject("COGS")
-            .add_subject("MATH")
-            .add_subject("ECE")
-            .filter_courses_by(CourseLevelFilter::LowerDivision)
-            .filter_courses_by(CourseLevelFilter::UpperDivision)]
-    };
-
     vec![TermSetting {
         term: "FA22",
         alias: Some("FA22A"),
