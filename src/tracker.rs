@@ -430,8 +430,8 @@ pub async fn track_webreg_enrollment(
                         "[{}] [{}] Course {} {} not found. Were you logged out? (FAIL_COUNT: {}).",
                         setting.term,
                         get_pretty_time(),
-                        r.subj_code,
-                        r.course_code,
+                        r.subj_code.trim(),
+                        r.course_code.trim(),
                         fail_count
                     );
                 }
@@ -442,7 +442,21 @@ pub async fn track_webreg_enrollment(
         }
     }
 
+    if !writer.buffer().is_empty() {
+        println!(
+            "[{}] [{}] Buffer not empty! Buffer has length {}.",
+            setting.term.get_pretty_time(),
+            writer.buffer().len()
+        );
+    }
+
     writer.flush().unwrap();
+    // Debugging possible issues with the buffer
+    println!(
+        "[{}] [{}] Buffer flushed. Final buffer length: {}.",
+        setting.term.get_pretty_time(),
+        writer.buffer().len()
+    );
 }
 
 struct CourseFile {
