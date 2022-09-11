@@ -58,9 +58,10 @@ pub async fn run_tracker(s: &WebRegHandler<'_>, #[cfg(feature = "git_repeat")] e
         tracker::track_webreg_enrollment(&s.scraper_wrapper, s.term_setting).await;
 
         // If we're here, this means something went wrong.
-        if s.term_setting.recovery_url.is_none() {
-            break;
-        }
+        let port = match s.term_setting.port {
+            Some(p) => p,
+            None => break,
+        };
 
         // Basically, keep on trying until we get back into WebReg.
         let mut success = false;
@@ -79,7 +80,7 @@ pub async fn run_tracker(s: &WebRegHandler<'_>, #[cfg(feature = "git_repeat")] e
 
             // Get new cookies.
             let new_cookie_str = {
-                match reqwest::get(s.term_setting.recovery_url.unwrap()).await {
+                match reqwest::get(format!("http://localhost:{}/cookie", port)).await {
                     Ok(t) => {
                         let txt = t.text().await.unwrap_or_default();
                         let json: Value = serde_json::from_str(&txt).unwrap_or_default();

@@ -48,7 +48,7 @@ pub struct TermSetting<'a> {
     /// The recovery URL, i.e., the URL the wrapper should
     /// make a request to so it can get new cookies to login
     /// with.
-    recovery_url: Option<&'a str>,
+    port: Option<usize>,
 
     /// The cooldown, if any, between requests. If none is
     /// specified, then this will use the default cooldown.
@@ -63,7 +63,7 @@ pub static TERMS: Lazy<Vec<TermSetting<'static>>> = Lazy::new(|| {
     vec![TermSetting {
         term: "FA22",
         alias: Some("FA22A"),
-        recovery_url: Some("http://localhost:3000/cookie"),
+        port: Some(3000),
 
         #[cfg(debug_assertions)]
         cooldown: 3.0,
@@ -133,6 +133,8 @@ static WEBREG_WRAPPERS: Lazy<HashMap<&str, WebRegHandler>> = Lazy::new(|| {
 
     map
 });
+
+static CLIENT: Lazy<Client> = Lazy::new(Client::new);
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<(), Box<dyn Error>> {
@@ -206,7 +208,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
     });
 
     let _ = rocket::build()
-        .mount("/", routes![get_course_info, search_courses, get_prereqs])
+        .mount(
+            "/",
+            routes![get_course_info, search_courses, get_prereqs, get_stat],
+        )
         .launch()
         .await
         .unwrap();
@@ -222,6 +227,72 @@ where
     match search_res {
         Ok(x) => content::RawJson(serde_json::to_string(&x).unwrap_or_else(|_| "[]".to_string())),
         Err(e) => content::RawJson(json!({ "error": e }).to_string()),
+    }
+}
+
+enum PortType {
+    Found(usize),
+    InvalidTerm,
+    NoPortDefined,
+}
+
+// We could delegate these endpoints to the actual login script itself and have it
+// deal with these requests, but I want to make everything more uniform by providing
+// all endpoints here. Plus, all ports and terms are defined here anyways which makes
+// it easier for the end user to use these endpoints (it would be more difficult if
+// these endpoints had to be accessed from the login script itself). 
+#[get("/stat/<stat_type>/<term>")]
+async fn get_stat(stat_type: String, term: String) -> content::RawJson<String> {
+    let port_to_use = {
+        if let Some(wg_handler) = WEBREG_WRAPPERS.get(&term.as_str()) {
+            if let Some(port) = wg_handler.term_setting.port {
+                PortType::Found(port)
+            } else {
+                PortType::NoPortDefined
+            }
+        } else {
+            PortType::InvalidTerm
+        }
+    };
+
+    match port_to_use {
+        PortType::Found(port) => match stat_type.as_str() {
+            "start" | "history" => {
+                match CLIENT
+                    .get(format!("http://localhost:{}/{}", port, stat_type))
+                    .send()
+                    .await
+                {
+                    Ok(o) => {
+                        let default_val = match stat_type.as_str() {
+                            "start" => "[]",
+                            "history" => "0",
+                            // Should never hit by earlier condition
+                            _ => "{}",
+                        };
+
+                        let data = o.text().await.unwrap_or_else(|_| default_val.to_string());
+                        content::RawJson(data)
+                    }
+                    Err(e) => content::RawJson(json!({ "error": format!("{}", e) }).to_string()),
+                }
+            }
+            _ => content::RawJson(
+                json!({ "error": format!("Invalid stat type: {}", stat_type) }).to_string(),
+            ),
+        },
+        PortType::InvalidTerm => content::RawJson(
+            json!({
+                "error": "Invalid term specified."
+            })
+            .to_string(),
+        ),
+        PortType::NoPortDefined => content::RawJson(
+            json!({
+                "error": "Term exists but no port defined."
+            })
+            .to_string(),
+        ),
     }
 }
 
