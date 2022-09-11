@@ -311,16 +311,12 @@ const server = http.createServer(async (req, res) => {
     }
     else if (req.url === "/history") {
         res.end(
-            JSON.stringify({
-                history: SUCCESS_CALL_HISTORY
-            })
+            JSON.stringify(SUCCESS_CALL_HISTORY)
         );
     }
     else if (req.url === "/start") {
         res.end(
-            JSON.stringify({
-                start: START_SESSION
-            })
+            JSON.stringify(START_SESSION)
         );
     }
     else {
