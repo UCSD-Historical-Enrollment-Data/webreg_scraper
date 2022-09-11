@@ -16,10 +16,7 @@ import * as http from "http";
 // <option value="THIS">Some Quarter</option>
 //                ----
 const ALL_TERMS: readonly string[] = [
-    "5250:::FA22",
-    "5210:::S122",
-    "5220:::S222",
-    "5230:::S322",
+    "5250:::FA22"
 ];
 
 const NUM_ATTEMPTS_BEFORE_EXIT: number = 6;
@@ -51,6 +48,13 @@ if (!termToUse || Number.isNaN(port)) {
 
 // Constants & other important variables
 let BROWSER: puppeteer.Browser | null = null;
+// When this instance started, represented as a unix timestamp
+let START_SESSION: number = 0;
+// Whenever a *successful* call to this API occurs (for login cookies),
+// add the unix timestamp corresponding to the time of the request
+// here. 
+let SUCCESS_CALL_HISTORY: number[] = [];
+// Config information (should contain webreg credentials)
 const CONFIG: IConfiguration = JSON.parse(
     fs.readFileSync(path.join(__dirname, "..", "credentials.json")
 ).toString());
@@ -274,6 +278,14 @@ async function getCookies(): Promise<string> {
         await page.click('#startpage-button-go');
         const cookies = await page.cookies(`https://act.ucsd.edu/webreg2/svc/wradapter/secure/sched-get-schednames?termcode=${term}`);
         log(`Extracted cookies for term '${term}' and responding back with them.\n`);
+
+        if (START_SESSION === 0) {
+            START_SESSION = Date.now();
+        }
+        else {
+            SUCCESS_CALL_HISTORY.push(Date.now());
+        }
+
         return cookies.map(x => `${x.name}=${x.value}`).join("; ");
     }
 }
@@ -296,15 +308,28 @@ const server = http.createServer(async (req, res) => {
                 cookie: await getCookies()
             })
         );
-
-        return;
     }
-
-    res.end(
-        JSON.stringify({
-            error: http.STATUS_CODES[404]
-        })
-    );
+    else if (req.url === "/history") {
+        res.end(
+            JSON.stringify({
+                history: SUCCESS_CALL_HISTORY
+            })
+        );
+    }
+    else if (req.url === "/start") {
+        res.end(
+            JSON.stringify({
+                start: START_SESSION
+            })
+        );
+    }
+    else {
+        res.end(
+            JSON.stringify({
+                error: http.STATUS_CODES[404]
+            })
+        );
+    }
 });
 
 server.listen(port, () => {
