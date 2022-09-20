@@ -57,7 +57,7 @@ let SUCCESS_CALL_HISTORY: number[] = [];
 // Config information (should contain webreg credentials)
 const CONFIG: IConfiguration = JSON.parse(
     fs.readFileSync(path.join(__dirname, "..", "credentials.json")
-).toString());
+    ).toString());
 const WEBREG_URL: string = "https://act.ucsd.edu/webreg2/start";
 
 interface IConfiguration {
@@ -147,12 +147,20 @@ async function getCookies(): Promise<string> {
         // Wait for either Duo 2FA frame (if we need 2FA) or "Go" button (if no 2FA needed) to show up
         log("Waiting for Duo 2FA frame or 'Go' button to show up.");
 
-        
+
         let loggedIn = false;
         const r = await Promise.race([
             // Either wait for the 'Go' button to show up, which implies that we
-            // have an authenticated session. If an error occurred, this means 
-            // that we couldn't find the button for some reason.
+            // have an authenticated session, **OR** wait for the Duo frame
+            // to show up. 
+            //
+            // If an error occurred, it means the 'Go' button could not be found
+            // after 30 seconds. This implies that the Duo frame could not be
+            // found since *if* the Duo frame did show up, then the error would
+            // have never occurred. 
+
+            // Here, we wait for the 'Go' button (to load WebReg for a term) to
+            // show up.
             (async () => {
                 try {
                     await page.waitForSelector("#startpage-button-go", { visible: true, timeout: 30 * 1000 });
@@ -162,7 +170,7 @@ async function getCookies(): Promise<string> {
                 }
                 return 0;
             })(),
-            // Or, we *repeatedly* check to see if the Duo 2FA frame is visible AND some components of
+            // Here, we *repeatedly* check to see if the Duo 2FA frame is visible AND some components of
             // the frame (in our case, the "Rememebr Me" checkbox) are visible.
             (async () => {
                 const interval = await new Promise<NodeJS.Timeout>(r => {
@@ -204,21 +212,24 @@ async function getCookies(): Promise<string> {
         // If we hit this, then we just try again.
         if (r === 2) {
             // If too many failed attempts, then notify the caller.
+            // After all, we don't want to make too many Duo pushes and get 
+            // the AD account blocked by ITS :)
             if (numFailedAttempts >= NUM_ATTEMPTS_BEFORE_EXIT) {
                 log("Unable to authenticate due to too many attempts reached, giving up.")
                 return "ERROR UNABLE TO AUTHENTICATE.";
             }
 
-            loggedIn = true;
+            // Not sure why we have this here
+            // loggedIn = true;
             numFailedAttempts++;
             log(`Unable to find a 'Go' button or Duo 2FA frame. Retrying (${numFailedAttempts}/${NUM_ATTEMPTS_BEFORE_EXIT}).`);
-            continue; 
+            continue;
         }
 
         log(
             r === 0
                 ? "'Go' button found. No 2FA needed."
-                : "Duo 2FA frame found. Ignore the initial 2FA request; i.e. do not"
+                : "Duo 2FA frame found. Ignore the initial 2FA request; i.e., do not"
                 + " accept the 2FA request until you are told to do so."
         );
 
@@ -230,6 +241,7 @@ async function getCookies(): Promise<string> {
         await waitFor(4 * 1000);
 
         // No go button means we need to log in.
+        // We could just check if (r === 1) though
         if (!(await page.$("#startpage-button-go"))) {
             log("Beginning Duo 2FA process. Do not accept yet.");
             // Need to find a duo iframe so we can actually authenticate 
@@ -266,10 +278,26 @@ async function getCookies(): Promise<string> {
             log("A Duo push was sent. Please respond to the new 2FA request.");
         }
 
-        await Promise.all([
-            page.waitForSelector("#startpage-select-term", { visible: true }),
-            page.waitForSelector('#startpage-button-go', { visible: true })
-        ]);
+        try {
+            await Promise.all([
+                page.waitForSelector("#startpage-select-term", { visible: true }),
+                page.waitForSelector('#startpage-button-go', { visible: true })
+            ]);
+        }
+        catch (e) {
+            // If this hits, then somehow the Go button (for loading WebReg with that term) 
+            // didn't load at all. This is rare, although it does happen from time to time 
+            // for reasons I have yet to understand.
+            //
+            // Note that I used a try/catch in Promise.all instead of Promise.allSettled
+            // because waitForSelector apparently throws the error instead of rejecting?
+            // Not sure if there's a way to handle that without try/catch
+            log("Could not find select term dropdown or Go button.");
+            console.info(e);
+            console.info();
+            return "";
+        }
+
         log("Logged into WebReg successfully.");
 
         await page.select("#startpage-select-term", termToUse!);
