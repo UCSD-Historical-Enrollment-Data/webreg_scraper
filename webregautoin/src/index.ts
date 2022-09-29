@@ -127,7 +127,7 @@ async function getCookies(): Promise<string> {
         }
         catch (e) {
             // Timed out probably, or failed to get page for some reason.
-            log(`An error occurred. Returning empty string. See error stack trace below.`);
+            log(`An error occurred when trying to reach WebReg. See error stack trace below.`);
             console.info(e);
             console.info();
             return "";
