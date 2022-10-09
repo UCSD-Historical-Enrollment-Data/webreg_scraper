@@ -10,7 +10,7 @@ use std::ops::{Add, AddAssign};
 use std::path::Path;
 use std::time::Duration;
 use tokio::sync::Mutex;
-use webweg::webreg_wrapper::{SearchType, WebRegWrapper};
+use webweg::wrapper::{SearchType, WebRegWrapper};
 
 cfg_feature_git! {
     use std::collections::HashSet;
@@ -135,7 +135,7 @@ pub async fn run_tracker(s: &WebRegHandler<'_>, #[cfg(feature = "git_repeat")] e
 /// - `end_location`: The end location for the cleaned CSV files. Just the base location will
 ///   suffice.
 pub async fn track_webreg_enrollment(
-    wrapper: &Mutex<WebRegWrapper<'_>>,
+    wrapper: &Mutex<WebRegWrapper>,
     setting: &TermSetting<'_>,
     #[cfg(feature = "git_repeat")] end_location: &str,
 ) {

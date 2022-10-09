@@ -20,8 +20,8 @@ use std::fs;
 use std::path::Path;
 use std::time::Duration;
 use tokio::sync::Mutex;
-use webweg::webreg_wrapper::{
-    CourseLevelFilter, Output, SearchRequestBuilder, SearchType, WebRegWrapper,
+use webweg::wrapper::{
+    CourseLevelFilter, SearchRequestBuilder, SearchType, WebRegWrapper, WrapperError,
 };
 
 cfg_feature_git! {
@@ -97,10 +97,10 @@ pub static TERMS: Lazy<Vec<TermSetting<'static>>> = Lazy::new(|| {
 
 pub struct WebRegHandler<'a> {
     /// Wrapper for the scraper.
-    scraper_wrapper: Mutex<WebRegWrapper<'a>>,
+    scraper_wrapper: Mutex<WebRegWrapper>,
 
     /// Wrapper for general requests made inbound by, say, a Discord bot.
-    general_wrapper: Mutex<WebRegWrapper<'a>>,
+    general_wrapper: Mutex<WebRegWrapper>,
 
     /// The term settings.
     term_setting: &'a TermSetting<'a>,
@@ -220,13 +220,13 @@ async fn main() -> Result<(), Box<dyn Error>> {
 }
 
 #[inline(always)]
-fn process_return<T>(search_res: Output<T>) -> content::RawJson<String>
+fn process_return<T>(search_res: Result<T, WrapperError>) -> content::RawJson<String>
 where
     T: Serialize,
 {
     match search_res {
         Ok(x) => content::RawJson(serde_json::to_string(&x).unwrap_or_else(|_| "[]".to_string())),
-        Err(e) => content::RawJson(json!({ "error": e }).to_string()),
+        Err(e) => content::RawJson(json!({ "error": e.to_string() }).to_string()),
     }
 }
 
@@ -240,7 +240,7 @@ enum PortType {
 // deal with these requests, but I want to make everything more uniform by providing
 // all endpoints here. Plus, all ports and terms are defined here anyways which makes
 // it easier for the end user to use these endpoints (it would be more difficult if
-// these endpoints had to be accessed from the login script itself). 
+// these endpoints had to be accessed from the login script itself).
 #[get("/stat/<stat_type>/<term>")]
 async fn get_stat(stat_type: String, term: String) -> content::RawJson<String> {
     let port_to_use = {

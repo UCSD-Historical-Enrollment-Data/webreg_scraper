@@ -1,6 +1,6 @@
 use super::helper;
 use std::collections::{HashMap, HashSet};
-use webweg::webreg_clean_defn::{CourseSection, MeetingDay};
+use webweg::types::{CourseSection, MeetingDay};
 
 const DAY_OF_WEEK: [&str; 7] = ["Su", "M", "Tu", "W", "Th", "F", "Sa"];
 
