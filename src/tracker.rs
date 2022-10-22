@@ -47,6 +47,21 @@ const TIMEOUT: [u64; 10] = [
 /// - `w`: The wrapper.
 /// - `s`: The wrapper handler.
 pub async fn run_tracker(s: &WebRegHandler<'_>, #[cfg(feature = "git_repeat")] end_loc: String) {
+    if s.term_setting.apply_term {
+        _ = s
+            .scraper_wrapper
+            .lock()
+            .await
+            .use_term(s.term_setting.term)
+            .await;
+        _ = s
+            .general_wrapper
+            .lock()
+            .await
+            .use_term(s.term_setting.term)
+            .await;
+    }
+
     // In case the given cookies were invalid, if this variable is false, we skip the
     // initial delay and immediately try to fetch the cookies.
     let mut first_passed = false;
@@ -104,6 +119,21 @@ pub async fn run_tracker(s: &WebRegHandler<'_>, #[cfg(feature = "git_repeat")] e
 
                 s.scraper_wrapper.lock().await.set_cookies(c.clone());
                 s.general_wrapper.lock().await.set_cookies(c);
+
+                if s.term_setting.apply_term {
+                    _ = s
+                        .scraper_wrapper
+                        .lock()
+                        .await
+                        .use_term(s.term_setting.term)
+                        .await;
+                    _ = s
+                        .general_wrapper
+                        .lock()
+                        .await
+                        .use_term(s.term_setting.term)
+                        .await;
+                }
                 success = true;
                 break;
             }
@@ -241,11 +271,15 @@ pub async fn track_webreg_enrollment(
                 Ok(r) if !r.is_empty() => {
                     fail_count = 0;
                     println!(
-                        "[{}] [{}] Processing {} section(s) for {}.",
+                        "[{}] [{}] Processing {} section(s) for {}: [{}]",
                         setting.term,
                         get_pretty_time(),
                         r.len(),
-                        r[0].subj_course_id
+                        r[0].subj_course_id,
+                        r.iter()
+                            .map(|data| data.section_id.as_str())
+                            .collect::<Vec<_>>()
+                            .join(", ")
                     );
 
                     let time = get_epoch_time();

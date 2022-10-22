@@ -10,6 +10,8 @@ import * as path from "path";
 import * as puppeteer from "puppeteer";
 import * as http from "http";
 
+const DEBUG_MODE: boolean = false;
+
 // The term to select. A term MUST be selected in order for the resulting cookies to be valid.
 // Use inspect elements on the dropdown box to get the option value. Specifically, TERM should 
 // be the value given by 
@@ -103,7 +105,9 @@ async function getCookies(): Promise<string> {
     if (!BROWSER) {
         log("Launching browser for first-time setup.");
         BROWSER = await puppeteer.launch({
-            args: ['--no-sandbox', '--disable-setuid-sandbox']
+            args: ['--no-sandbox', '--disable-setuid-sandbox'],
+            // If debug mode is on, turn OFF headless mode
+            headless: !DEBUG_MODE 
         });
     }
 

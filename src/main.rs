@@ -56,43 +56,77 @@ pub struct TermSetting<'a> {
 
     /// The courses to search for this term.
     search_query: Vec<SearchRequestBuilder<'static>>,
+
+    /// Whether this term needs to be applied manually to the wrapper
+    /// before use.
+    apply_term: bool,
 }
 
 /// All terms and their associated "recovery URLs"
 pub static TERMS: Lazy<Vec<TermSetting<'static>>> = Lazy::new(|| {
-    vec![TermSetting {
-        term: "FA22",
-        alias: Some("FA22A"),
-        port: Some(3000),
+    vec![
+        TermSetting {
+            term: "FA22",
+            alias: Some("FA22A"),
+            port: Some(3000),
+            apply_term: false,
 
-        #[cfg(debug_assertions)]
-        cooldown: 3.0,
-        #[cfg(not(debug_assertions))]
-        cooldown: 0.42,
+            #[cfg(debug_assertions)]
+            cooldown: 3.0,
+            #[cfg(not(debug_assertions))]
+            cooldown: 0.42,
 
-        #[cfg(debug_assertions)]
-        search_query: vec![SearchRequestBuilder::new()
-            .filter_courses_by(CourseLevelFilter::LowerDivision)
-            .filter_courses_by(CourseLevelFilter::UpperDivision)
-            .add_department("MATH")
-            .add_department("CSE")
-            .add_department("COGS")],
-
-        #[cfg(not(debug_assertions))]
-        search_query: vec![
-            // For fall, we want *all* lower- and upper-division courses
-            SearchRequestBuilder::new()
+            #[cfg(debug_assertions)]
+            search_query: vec![SearchRequestBuilder::new()
                 .filter_courses_by(CourseLevelFilter::LowerDivision)
-                .filter_courses_by(CourseLevelFilter::UpperDivision),
-            // But only graduate math/cse/ece/cogs courses
-            SearchRequestBuilder::new()
-                .filter_courses_by(CourseLevelFilter::Graduate)
+                .filter_courses_by(CourseLevelFilter::UpperDivision)
                 .add_department("MATH")
                 .add_department("CSE")
-                .add_department("ECE")
-                .add_department("COGS"),
-        ],
-    }]
+                .add_department("COGS")],
+
+            #[cfg(not(debug_assertions))]
+            search_query: vec![
+                // For fall, we want *all* lower- and upper-division courses
+                SearchRequestBuilder::new()
+                    .filter_courses_by(CourseLevelFilter::LowerDivision)
+                    .filter_courses_by(CourseLevelFilter::UpperDivision),
+                // But only graduate math/cse/ece/cogs courses
+                SearchRequestBuilder::new()
+                    .filter_courses_by(CourseLevelFilter::Graduate)
+                    .add_department("MATH")
+                    .add_department("CSE")
+                    .add_department("ECE")
+                    .add_department("COGS"),
+            ],
+        },
+        TermSetting {
+            term: "WI23",
+            alias: None,
+            port: Some(3001),
+            apply_term: true,
+
+            #[cfg(debug_assertions)]
+            cooldown: 3.0,
+            // TODO: change cooldown to something lower when webreg
+            // shows WI23
+            #[cfg(not(debug_assertions))]
+            cooldown: 2.0,
+
+            #[cfg(debug_assertions)]
+            search_query: vec![SearchRequestBuilder::new()
+                .filter_courses_by(CourseLevelFilter::LowerDivision)
+                .filter_courses_by(CourseLevelFilter::UpperDivision)
+                .add_department("MATH")
+                .add_department("CSE")
+                .add_department("COGS")],
+
+            #[cfg(not(debug_assertions))]
+            search_query: vec![SearchRequestBuilder::new()
+                .filter_courses_by(CourseLevelFilter::LowerDivision)
+                .filter_courses_by(CourseLevelFilter::UpperDivision)
+                .filter_courses_by(CourseLevelFilter::Graduate)],
+        },
+    ]
 });
 
 pub struct WebRegHandler<'a> {
