@@ -372,6 +372,9 @@ struct SearchQuery {
     instructor: Option<String>,
     title: Option<String>,
     only_allow_open: bool,
+    show_lower_div: bool,
+    show_upper_div: bool,
+    show_grad_div: bool,
 }
 
 #[post("/search/<term>", format = "json", data = "<query>")]
@@ -403,6 +406,18 @@ async fn search_courses(term: String, query: Json<SearchQuery>) -> content::RawJ
 
         if query.only_allow_open {
             query_builder = query_builder.only_allow_open();
+        }
+
+        if query.show_grad_div {
+            query_builder = query_builder.filter_courses_by(CourseLevelFilter::Graduate);
+        }
+
+        if query.show_upper_div {
+            query_builder = query_builder.filter_courses_by(CourseLevelFilter::UpperDivision);
+        }
+
+        if query.show_lower_div {
+            query_builder = query_builder.filter_courses_by(CourseLevelFilter::LowerDivision);
         }
 
         let wg_handler = wg_handler.general_wrapper.lock().await;
