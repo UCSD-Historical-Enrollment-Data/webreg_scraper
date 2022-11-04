@@ -18,18 +18,12 @@ use std::collections::HashMap;
 use std::error::Error;
 use std::fs;
 use std::path::Path;
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::time::Duration;
 use tokio::sync::Mutex;
 use webweg::wrapper::{
     CourseLevelFilter, SearchRequestBuilder, SearchType, WebRegWrapper, WrapperError,
 };
-
-cfg_feature_git! {
-    use crate::git::GitManager;
-    use crate::util::get_pretty_time;
-    use chrono::Local;
-    use std::thread;
-}
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
@@ -64,66 +58,76 @@ pub struct TermSetting<'a> {
 
 /// All terms and their associated "recovery URLs"
 pub static TERMS: Lazy<Vec<TermSetting<'static>>> = Lazy::new(|| {
-    let mut v = vec![];
-    v.push(TermSetting {
-        term: "FA22",
-        alias: Some("FA22A"),
-        port: Some(3000),
-        apply_term: false,
+    Vec::from([
+        TermSetting {
+            term: "FA22",
+            alias: Some("FA22A"),
+            port: Some(3000),
+            apply_term: false,
 
-        #[cfg(debug_assertions)]
-        cooldown: 3.0,
-        #[cfg(not(debug_assertions))]
-        cooldown: 0.42,
+            #[cfg(debug_assertions)]
+            cooldown: 3.0,
+            #[cfg(not(debug_assertions))]
+            cooldown: 0.42,
 
-        #[cfg(debug_assertions)]
-        search_query: vec![SearchRequestBuilder::new()
-            .filter_courses_by(CourseLevelFilter::LowerDivision)
-            .filter_courses_by(CourseLevelFilter::UpperDivision)
-            .add_department("MATH")
-            .add_department("CSE")
-            .add_department("COGS")],
-
-        #[cfg(not(debug_assertions))]
-        search_query: vec![
-            // For fall, we want *all* lower- and upper-division courses
-            SearchRequestBuilder::new()
+            #[cfg(debug_assertions)]
+            search_query: vec![SearchRequestBuilder::new()
                 .filter_courses_by(CourseLevelFilter::LowerDivision)
-                .filter_courses_by(CourseLevelFilter::UpperDivision),
-            // But only graduate math/cse/ece/cogs courses
-            SearchRequestBuilder::new()
-                .filter_courses_by(CourseLevelFilter::Graduate)
+                .filter_courses_by(CourseLevelFilter::UpperDivision)
                 .add_department("MATH")
                 .add_department("CSE")
-                .add_department("ECE")
-                .add_department("COGS"),
-        ],
-    });
+                .add_department("COGS")],
 
-    #[cfg(not(debug_assertions))]
-    v.push(TermSetting {
-        term: "WI23",
-        alias: None,
-        port: Some(3001),
-        apply_term: false,
-        cooldown: 0.42,
+            #[cfg(not(debug_assertions))]
+            search_query: vec![
+                // For fall, we want *all* lower- and upper-division courses
+                SearchRequestBuilder::new()
+                    .filter_courses_by(CourseLevelFilter::LowerDivision)
+                    .filter_courses_by(CourseLevelFilter::UpperDivision),
+                // But only graduate math/cse/ece/cogs courses
+                SearchRequestBuilder::new()
+                    .filter_courses_by(CourseLevelFilter::Graduate)
+                    .add_department("MATH")
+                    .add_department("CSE")
+                    .add_department("ECE")
+                    .add_department("COGS"),
+            ],
+        },
+        TermSetting {
+            term: "WI23",
+            alias: None,
+            port: Some(3001),
+            apply_term: false,
 
-        search_query: vec![
-            // We want *all* lower- and upper-division courses
-            SearchRequestBuilder::new()
+            #[cfg(debug_assertions)]
+            cooldown: 3.0,
+            #[cfg(not(debug_assertions))]
+            cooldown: 0.42,
+
+            #[cfg(debug_assertions)]
+            search_query: vec![SearchRequestBuilder::new()
                 .filter_courses_by(CourseLevelFilter::LowerDivision)
-                .filter_courses_by(CourseLevelFilter::UpperDivision),
-            // But only graduate math/cse/ece/cogs courses
-            SearchRequestBuilder::new()
-                .filter_courses_by(CourseLevelFilter::Graduate)
+                .filter_courses_by(CourseLevelFilter::UpperDivision)
                 .add_department("MATH")
                 .add_department("CSE")
-                .add_department("ECE")
-                .add_department("COGS"),
-        ],
-    });
+                .add_department("COGS")],
 
-    v
+            #[cfg(not(debug_assertions))]
+            search_query: vec![
+                // For fall, we want *all* lower- and upper-division courses
+                SearchRequestBuilder::new()
+                    .filter_courses_by(CourseLevelFilter::LowerDivision)
+                    .filter_courses_by(CourseLevelFilter::UpperDivision),
+                // But only graduate math/cse/ece/cogs courses
+                SearchRequestBuilder::new()
+                    .filter_courses_by(CourseLevelFilter::Graduate)
+                    .add_department("MATH")
+                    .add_department("CSE")
+                    .add_department("ECE")
+                    .add_department("COGS"),
+            ],
+        },
+    ])
 });
 
 pub struct WebRegHandler<'a> {
@@ -167,76 +171,28 @@ static WEBREG_WRAPPERS: Lazy<HashMap<&str, WebRegHandler>> = Lazy::new(|| {
 
 static CLIENT: Lazy<Client> = Lazy::new(Client::new);
 
+// The stop flag is our way of communicating to each wrapper that we're stopping
+// the process completely. We use a stop flag so we can flush all non-empty buffers
+// before quitting the program.
+static STOP_FLAG: Lazy<AtomicBool> = Lazy::new(|| AtomicBool::new(false));
+
+// The num_stopped variable here tells us exactly how many wrappers have actually
+// stopped. We want to ensure all wrappers are done working before we quit the
+// program.
+static NUM_STOPPED: Lazy<AtomicUsize> = Lazy::new(|| AtomicUsize::new(0));
+
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<(), Box<dyn Error>> {
     println!("WebRegWrapper Version {}", VERSION);
 
-    #[cfg(feature = "git_repeat")]
-    println!("\tUsing Git Auto-Commit.");
-
-    // Location to store the cleaned CSV files. For example, if the base folder
-    // that we want to save these files to is `../UCSDEnrollmentData` (with child
-    // directories, say, `UCSDEnrollmentData/FA22`, `UCSDEnrollmentData/SP22`,
-    // etc.), then we would just have `../UCSDEnrollmentData`.
-    #[cfg(feature = "git_repeat")]
-    let clean_loc = {
-        let t = get_file_content("clean.txt");
-        if t.is_empty() {
-            // exit process
-            panic!();
-        }
-
-        t
-    };
-
-    #[cfg(feature = "git_repeat")]
-    {
-        let path = Path::new(&clean_loc);
-        if !path.exists() {
-            panic!("Path {} does not exist. Please create the directory and any associated child directories.", 
-            path.display());
-        }
-        println!("Set path for clean data: {}", path.display());
-    }
-
     for (_, wg_handler) in WEBREG_WRAPPERS.iter() {
-        #[cfg(feature = "git_repeat")]
-        let loc = clean_loc.clone();
         tokio::spawn(async move {
             // wg_handler has a static lifetime, so we can do this just fine.
-            #[cfg(feature = "git_repeat")]
-            run_tracker(wg_handler, loc).await;
-            #[cfg(not(feature = "git_repeat"))]
             run_tracker(wg_handler).await;
         });
 
         tokio::time::sleep(Duration::from_secs_f64(STARTUP_COOLDOWN)).await;
     }
-
-    // Spawn a thread to handle git pull/push, since Command::new()...status()
-    // is a blocking call which can potentially cause problems if we're pulling
-    // or pushing a *lot* of files.
-    #[cfg(feature = "git_repeat")]
-    thread::spawn(move || {
-        let loc = clean_loc;
-        let git = GitManager::new(Path::new(&loc));
-        loop {
-            thread::sleep(Duration::from_secs(5 * 60));
-            println!("[GIT] [{}] Running Git service.", get_pretty_time());
-            git.pull_files();
-            thread::sleep(Duration::from_secs(2));
-            git.add_all_files();
-            thread::sleep(Duration::from_secs(2));
-
-            let commit_msg = Local::now().format("%B %d, %Y at %I:%M:%S %p").to_string();
-            git.commit_files(&format!("{} - Update (Automated)", commit_msg));
-            thread::sleep(Duration::from_secs(2));
-
-            git.push_files();
-            println!("[GIT] [{}] Git service finished.", get_pretty_time());
-            thread::sleep(Duration::from_secs(2));
-        }
-    });
 
     let _ = rocket::build()
         .mount(
@@ -246,6 +202,18 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .launch()
         .await
         .unwrap();
+
+    // Rocket should only die if CTRL-C is detected
+    println!("CTRL-C Detected. Stopping...");
+    STOP_FLAG.store(true, Ordering::SeqCst);
+
+    while NUM_STOPPED.load(Ordering::SeqCst) < WEBREG_WRAPPERS.len() {
+        // Keep looping basically. Because we're working with a
+        // single-threaded environment, we do want to sleep from time
+        // to time so the other "green threads" have the opportunity
+        // to run.
+        tokio::time::sleep(Duration::from_secs(1)).await;
+    }
 
     Ok(())
 }

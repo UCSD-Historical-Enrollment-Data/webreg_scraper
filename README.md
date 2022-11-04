@@ -23,13 +23,6 @@ Some other features that are supported include:
 - exporting all available sections into a CSV file, and
 - hosting a small web server (using [Rocket](https://rocket.rs/)) to make it easy for other applications to use the data.
 
-## Conditional Compilation
-If you'd like the program to commit the (cleaned) CSV files directly to a repository every 5 minutes, enable the `git_repeat` flag. **By default**, this is not the case.
-
-You will need to create a `clean.txt` file with the content only being a path to the directory containing the Git repository information (i.e., the `.git` folder). The target directory itself can be empty; the program will create the necessary folders.
-
-As a side note, there appears to be a bug with either the program or Git where some files are not being properly pushed to GitHub.
-
 ## Setup
 Below are instructions on how you can build and run this project.
 
