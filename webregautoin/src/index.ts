@@ -18,7 +18,6 @@ const DEBUG_MODE: boolean = false;
 // <option value="THIS">Some Quarter</option>
 //                ----
 const ALL_TERMS: readonly string[] = [
-    "5250:::FA22",
     "5260:::WI23"
 ];
 
