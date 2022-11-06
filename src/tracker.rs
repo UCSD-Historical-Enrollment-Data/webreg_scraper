@@ -266,15 +266,11 @@ pub async fn track_webreg_enrollment(wrapper: &Mutex<WebRegWrapper>, setting: &T
                 Ok(r) if !r.is_empty() => {
                     fail_count = 0;
                     println!(
-                        "[{}] [{}] Processing {} section(s) for {}: [{}]",
+                        "[{}] [{}] Processing {} section(s) for {}",
                         setting.term,
                         get_pretty_time(),
                         r.len(),
-                        r[0].subj_course_id,
-                        r.iter()
-                            .map(|data| data.section_id.as_str())
-                            .collect::<Vec<_>>()
-                            .join(", ")
+                        r[0].subj_course_id
                     );
 
                     let time = get_epoch_time();
