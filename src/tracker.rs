@@ -1,6 +1,6 @@
 use crate::util::{get_epoch_time, get_pretty_time};
+use crate::STOP_FLAG;
 use crate::{tracker, TermSetting, WebRegHandler};
-use crate::{NUM_STOPPED, STOP_FLAG};
 use serde_json::Value;
 use std::collections::HashMap;
 use std::fs::{File, OpenOptions};
@@ -61,7 +61,9 @@ pub async fn run_tracker(s: &WebRegHandler<'_>) {
     // initial delay and immediately try to fetch the cookies.
     let mut first_passed = false;
     loop {
+        s.is_running.store(true, Ordering::SeqCst);
         tracker::track_webreg_enrollment(&s.scraper_wrapper, s.term_setting).await;
+        s.is_running.store(false, Ordering::SeqCst);
 
         if STOP_FLAG.load(Ordering::SeqCst) {
             break;
@@ -146,7 +148,6 @@ pub async fn run_tracker(s: &WebRegHandler<'_>) {
     // This should only run if we're 100% done with this
     // wrapper. For example, either the wrapper could not
     // log back in or we forced it to stop.
-    NUM_STOPPED.fetch_add(1, Ordering::SeqCst);
     println!(
         "[{}] [{}] Quitting.",
         s.term_setting.term,

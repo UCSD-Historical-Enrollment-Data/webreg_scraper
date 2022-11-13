@@ -15,10 +15,10 @@ use rocket::serde::{Deserialize, Serialize};
 use rocket::{get, post, routes};
 use serde_json::json;
 use std::collections::HashMap;
-use std::error::Error;
 use std::fs;
 use std::path::Path;
-use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::process::ExitCode;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 use tokio::sync::Mutex;
 use webweg::wrapper::{
@@ -103,6 +103,9 @@ pub struct WebRegHandler<'a> {
 
     /// The term settings.
     term_setting: &'a TermSetting<'a>,
+
+    /// Whether the associated scraper is running.
+    is_running: AtomicBool,
 }
 
 // Init all wrappers here.
@@ -126,6 +129,7 @@ static WEBREG_WRAPPERS: Lazy<HashMap<&str, WebRegHandler>> = Lazy::new(|| {
                     term_setting.term,
                 )),
                 term_setting,
+                is_running: AtomicBool::new(false),
             },
         );
     }
@@ -133,6 +137,7 @@ static WEBREG_WRAPPERS: Lazy<HashMap<&str, WebRegHandler>> = Lazy::new(|| {
     map
 });
 
+// Create a global client since it doesn't really matter what client we're using.
 static CLIENT: Lazy<Client> = Lazy::new(Client::new);
 
 // The stop flag is our way of communicating to each wrapper that we're stopping
@@ -140,13 +145,8 @@ static CLIENT: Lazy<Client> = Lazy::new(Client::new);
 // before quitting the program.
 static STOP_FLAG: Lazy<AtomicBool> = Lazy::new(|| AtomicBool::new(false));
 
-// The num_stopped variable here tells us exactly how many wrappers have actually
-// stopped. We want to ensure all wrappers are done working before we quit the
-// program.
-static NUM_STOPPED: Lazy<AtomicUsize> = Lazy::new(|| AtomicUsize::new(0));
-
 #[tokio::main(flavor = "current_thread")]
-async fn main() -> Result<(), Box<dyn Error>> {
+async fn main() -> ExitCode {
     println!("WebRegWrapper Version {}", VERSION);
 
     for (_, wg_handler) in WEBREG_WRAPPERS.iter() {
@@ -171,7 +171,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
     println!("CTRL-C Detected. Stopping...");
     STOP_FLAG.store(true, Ordering::SeqCst);
 
-    while NUM_STOPPED.load(Ordering::SeqCst) < WEBREG_WRAPPERS.len() {
+    while WEBREG_WRAPPERS
+        .values()
+        .any(|x| x.is_running.load(Ordering::SeqCst))
+    {
         // Keep looping basically. Because we're working with a
         // single-threaded environment, we do want to sleep from time
         // to time so the other "green threads" have the opportunity
@@ -179,7 +182,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         tokio::time::sleep(Duration::from_secs(1)).await;
     }
 
-    Ok(())
+    ExitCode::SUCCESS
 }
 
 #[inline(always)]
