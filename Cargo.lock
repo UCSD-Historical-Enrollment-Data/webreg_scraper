@@ -1950,7 +1950,6 @@ version = "0.3.7"
 dependencies = [
  "chrono",
  "once_cell",
- "reqwest",
  "rocket",
  "serde",
  "serde_json",
@@ -1960,8 +1959,9 @@ dependencies = [
 
 [[package]]
 name = "webweg"
-version = "0.6.1"
-source = "git+https://github.com/ewang2002/webweg?branch=stable#b263f22c6a5871c0631a2c4ad285e8cb5c844156"
+version = "0.7.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9ead3d6f448758f373ce4718898b72288f84f9f049d530a0be9aa13cd2dd1d87"
 dependencies = [
  "reqwest",
  "serde",

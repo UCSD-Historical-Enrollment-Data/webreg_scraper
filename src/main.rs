@@ -1,6 +1,5 @@
 #![allow(dead_code)]
 mod export;
-mod git;
 mod schedule;
 mod tracker;
 mod util;
@@ -8,7 +7,6 @@ mod util;
 use crate::tracker::run_tracker;
 
 use once_cell::sync::Lazy;
-use reqwest::Client;
 use rocket::response::content;
 use rocket::serde::json::Json;
 use rocket::serde::{Deserialize, Serialize};
@@ -21,6 +19,7 @@ use std::process::ExitCode;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 use tokio::sync::Mutex;
+use webweg::reqwest::Client;
 use webweg::wrapper::{
     CourseLevelFilter, SearchRequestBuilder, SearchType, WebRegWrapper, WrapperError,
 };
@@ -49,7 +48,7 @@ pub struct TermSetting<'a> {
     cooldown: f64,
 
     /// The courses to search for this term.
-    search_query: Vec<SearchRequestBuilder<'static>>,
+    search_query: Vec<SearchRequestBuilder>,
 
     /// Whether this term needs to be applied manually to the wrapper
     /// before use.

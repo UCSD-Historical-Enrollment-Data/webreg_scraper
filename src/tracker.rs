@@ -92,7 +92,7 @@ pub async fn run_tracker(s: &WebRegHandler<'_>) {
 
             // Get new cookies.
             let new_cookie_str = {
-                match reqwest::get(format!("http://localhost:{}/cookie", port)).await {
+                match webweg::reqwest::get(format!("http://localhost:{}/cookie", port)).await {
                     Ok(t) => {
                         let txt = t.text().await.unwrap_or_default();
                         let json: Value = serde_json::from_str(&txt).unwrap_or_default();
