@@ -5,6 +5,7 @@ import { getCurrentTime, getDateTime, IConfiguration, stopFor, tryExecuteAsync }
 
 const AXIOS: AxiosInstance = axios.create();
 const COOLDOWN: number = 90 * 1000;
+const DIVIDER: string = "========================================================";
 
 async function main() {
     // Validate that everything is correct.
@@ -94,15 +95,15 @@ async function check(term: string, config: IConfiguration): Promise<void> {
                 actualMsg += "\n" + (peopleToPing.map(x => `<@${x}>`).join(", "));
             }
             
-            actualMsg += "\n========================================================";
+            actualMsg += `\n${DIVIDER}`;
 
             try {
                 await AXIOS.post(url, {
                     "content": actualMsg,
                 });
             }
-            catch (_) {
-                console.error(`[${dateStr}] [${term}] Unable to send error information to: ${url}.s`)
+            catch (e) {
+                console.error(`[${dateStr}] [${term}] Unable to send error information to: ${url}\n${e}\n${DIVIDER}`);
             }
         }
     }
