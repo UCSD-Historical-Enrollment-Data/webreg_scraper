@@ -33,6 +33,7 @@ async function check(term: string, config: IConfiguration): Promise<void> {
         console.info(`[${dateStr}] [${term}] Skipping check due to time being during WebReg restart period.`);
         await stopFor(COOLDOWN);
         check(term, config).then();
+        return;
     }
 
     console.info(`[${dateStr}] [${term}] Checking scraper status (hour: ${currDate.getHours()}).`);
@@ -86,12 +87,14 @@ async function check(term: string, config: IConfiguration): Promise<void> {
     }
 
     if (strToSend.length > 0) {
-        const baseMsg = `**\`[${getCurrentTime()} • ${term}]\`** __**Scraper Warning**__\n${strToSend.join("\n")}`;
+        const baseMsg = `**\`[${term} • ${getCurrentTime()}]\`** __**Scraper Warning**__\n${strToSend.join("\n")}`;
         for (const {url, peopleToPing} of config.webhookUrls) {
             let actualMsg = baseMsg;
             if (peopleToPing.length > 0) {
                 actualMsg += "\n" + (peopleToPing.map(x => `<@${x}>`).join(", "));
             }
+            
+            actualMsg += "\n========================================================";
 
             try {
                 await AXIOS.post(url, {
