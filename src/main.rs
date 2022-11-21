@@ -137,6 +137,7 @@ static WEBREG_WRAPPERS: Lazy<HashMap<&str, WebRegHandler>> = Lazy::new(|| {
 });
 
 // Create a global client since it doesn't really matter what client we're using.
+// All this is doing is getting stats from the login script.
 static CLIENT: Lazy<Client> = Lazy::new(Client::new);
 
 // The stop flag is our way of communicating to each wrapper that we're stopping
@@ -160,7 +161,13 @@ async fn main() -> ExitCode {
     let _ = rocket::build()
         .mount(
             "/",
-            routes![get_course_info, search_courses, get_prereqs, get_stat],
+            routes![
+                get_course_info,
+                search_courses,
+                get_prereqs,
+                get_stat,
+                get_status
+            ],
         )
         .launch()
         .await
@@ -258,6 +265,21 @@ async fn get_stat(stat_type: String, term: String) -> content::RawJson<String> {
             })
             .to_string(),
         ),
+    }
+}
+
+#[get("/status/<term>")]
+async fn get_status(term: String) -> content::RawJson<String> {
+    if let Some(wg_handler) = WEBREG_WRAPPERS.get(&term.as_str()) {
+        let status = wg_handler.is_running.load(Ordering::SeqCst);
+        content::RawJson(json!({ "status": status }).to_string())
+    } else {
+        content::RawJson(
+            json!({
+                "error": "Invalid term specified."
+            })
+            .to_string(),
+        )
     }
 }
 
