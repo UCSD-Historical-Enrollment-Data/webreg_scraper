@@ -10,5 +10,4 @@ target/
 cookie.txt
 cookie_*.txt
 *.csv
-schedule.txt
-clean.txt
+config.json
