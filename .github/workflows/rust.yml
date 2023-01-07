@@ -1,4 +1,4 @@
-name: Rust / General
+name: Rust
 
 on:
   push:
@@ -29,13 +29,13 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       - name: Build
-        run: cargo build --features api --verbose
+        run: cargo build --features scraper --verbose
       - name: Clippy
         run: cargo clippy
       - name: Format
         run: cargo fmt --check
   build_both:
-    name: scraper only / compilation & style
+    name: all / compilation & style
     runs-on: ubuntu-latest
 
     steps:
