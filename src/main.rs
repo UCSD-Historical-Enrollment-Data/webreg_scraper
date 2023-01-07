@@ -7,11 +7,12 @@ use std::process::ExitCode;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
+
 use webweg::reqwest::Client;
 
-use crate::api::status_api::{api_get_login_script_stats, api_get_term_status};
 #[cfg(feature = "api")]
 use {
+    crate::api::status_api::{api_get_login_script_stats, api_get_term_status},
     crate::api::webreg_api::{api_get_course_info, api_get_prereqs, api_get_search_courses},
     axum::routing::get,
     axum::Router,
