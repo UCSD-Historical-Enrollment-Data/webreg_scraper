@@ -18,10 +18,10 @@ use {
 use crate::tracker::run_tracker;
 use crate::types::{ConfigScraper, WrapperMap, WrapperState};
 
+mod api;
 mod tracker;
 mod types;
 mod util;
-mod api;
 
 #[cfg(not(any(feature = "scraper", feature = "api")))]
 compile_error!("A feature ('scraper' and/or 'api') must be specified!");

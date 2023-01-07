@@ -29,5 +29,6 @@ panic = "abort"
 opt-level = 3
 
 [features]
+default = ["scraper", "api"]
 scraper = []
 api = ["dep:axum", "dep:axum-macros"]

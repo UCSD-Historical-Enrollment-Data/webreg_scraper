@@ -11,37 +11,51 @@ env:
 
 jobs:
   build_api:
-    name: api only / compilation & style
+    name: api only / compilation
     runs-on: ubuntu-latest
 
     steps:
       - uses: actions/checkout@v3
       - name: Build
-        run: cargo build --features api --verbose
+        run: cargo build --no-default-features --features api --verbose
       - name: Clippy
-        run: cargo clippy
-      - name: Format
-        run: cargo fmt --check
+        run: cargo clippy --no-default-features --features api
+
+
   build_scraper:
-    name: scraper only / compilation & style
+    name: scraper only / compilation
     runs-on: ubuntu-latest
 
     steps:
       - uses: actions/checkout@v3
       - name: Build
-        run: cargo build --features scraper --verbose
+        run: cargo build --no-default-features --features scraper --verbose
+      - name: Clippy
+        run: cargo clippy --no-default-features --features scraper
+
+
+  general_ubuntu:
+    name: general(ubuntu) / compilation & style
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+      - name: Build
+        run: cargo build --verbose
       - name: Clippy
         run: cargo clippy
       - name: Format
         run: cargo fmt --check
-  build_both:
-    name: all / compilation & style
-    runs-on: ubuntu-latest
+
+
+  general_windows:
+    name: general(windows) / compilation & style
+    runs-on: windows-latest
 
     steps:
       - uses: actions/checkout@v3
       - name: Build
-        run: cargo build --features "api scraper" --verbose
+        run: cargo build --verbose
       - name: Clippy
         run: cargo clippy
       - name: Format
