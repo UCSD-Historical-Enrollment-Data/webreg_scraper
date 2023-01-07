@@ -1,18 +1,13 @@
 #![cfg(feature = "api")]
-use std::future::Future;
-use std::sync::Arc;
 
 use axum::extract::{Path, Query, State};
-use axum::http::StatusCode;
-use axum::response::{IntoResponse, Response};
+use axum::response::Response;
 use axum::Json;
-use serde::{Deserialize, Serialize};
-use serde_json::json;
-use webweg::wrapper::{
-    CourseLevelFilter, DayOfWeek, SearchRequestBuilder, SearchType, WrapperError,
-};
+use serde::Deserialize;
+use webweg::wrapper::{CourseLevelFilter, DayOfWeek, SearchRequestBuilder, SearchType};
 
-use crate::types::{TermInfo, WrapperState};
+use crate::api::util::{api_get_general, process_return};
+use crate::types::WrapperState;
 
 #[derive(Deserialize)]
 pub struct CourseQueryStr {
@@ -36,7 +31,7 @@ pub async fn api_get_course_info(
         term.as_str(),
         move |term_info| async move {
             let guard = term_info.general_wrapper.lock().await;
-            guard.get_course_info(&crsc.subject, &crsc.number).await
+            process_return(guard.get_course_info(&crsc.subject, &crsc.number).await)
         },
         s,
     )
@@ -59,7 +54,7 @@ pub async fn api_get_prereqs(
         term.as_str(),
         move |term_info| async move {
             let guard = term_info.general_wrapper.lock().await;
-            guard.get_prereqs(&crsc.subject, &crsc.number).await
+            process_return(guard.get_prereqs(&crsc.subject, &crsc.number).await)
         },
         s,
     )
@@ -96,6 +91,7 @@ pub struct CourseSearchJsonBody {
 pub async fn api_get_search_courses(
     Path(term): Path<String>,
     State(s): State<WrapperState>,
+    // The Json needs to be the last parameter since its request body is being consumed.
     Json(search_info): Json<CourseSearchJsonBody>,
 ) -> Response {
     api_get_general(
@@ -192,64 +188,13 @@ pub async fn api_get_search_courses(
             }
 
             let guard = term_info.general_wrapper.lock().await;
-            guard
-                .search_courses(SearchType::Advanced(&query_builder))
-                .await
+            process_return(
+                guard
+                    .search_courses(SearchType::Advanced(&query_builder))
+                    .await,
+            )
         },
         s,
     )
     .await
-}
-
-/// A helper function that automatically handles the case when an invalid term is given.
-///
-/// # Parameters
-/// - `term`: The possibly invalid term.
-/// - `res`: The closure that produces the value to be returned by the API.
-/// - `state`: The wrapper's state.
-///
-/// # Returns
-/// The response.
-#[inline]
-async fn api_get_general<A, Y, U>(term: &str, res: A, state: WrapperState) -> Response
-where
-    A: FnOnce(Arc<TermInfo>) -> U,
-    Y: Serialize,
-    U: Future<Output = webweg::wrapper::Result<Y>>,
-{
-    if let Some(term_data) = state.all_wrappers.get(term) {
-        process_return(res(term_data.clone()).await)
-    } else {
-        (
-            StatusCode::NOT_FOUND,
-            Json(json!({
-                "error": "Specified term is not supported at this time."
-            })),
-        )
-            .into_response()
-    }
-}
-
-/// Processes the return type from the WebReg wrapper into a Response type for
-/// the API wrapper.
-///
-/// # Parameters
-/// - `res`: The result of the call to the wrapper.
-///
-/// # Returns
-/// The response.
-fn process_return<T>(res: Result<T, WrapperError>) -> Response
-where
-    T: Serialize,
-{
-    match res {
-        Ok(data) => (StatusCode::OK, Json(data)).into_response(),
-        Err(err) => (
-            StatusCode::BAD_REQUEST,
-            Json(json!({
-                "error": err.to_string()
-            })),
-        )
-            .into_response(),
-    }
 }

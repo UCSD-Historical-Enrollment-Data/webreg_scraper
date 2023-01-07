@@ -7,7 +7,9 @@ use std::process::ExitCode;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
+use webweg::reqwest::Client;
 
+use crate::api::status_api::{api_get_login_script_stats, api_get_term_status};
 #[cfg(feature = "api")]
 use {
     crate::api::webreg_api::{api_get_course_info, api_get_prereqs, api_get_search_courses},
@@ -85,6 +87,7 @@ async fn main() -> ExitCode {
         all_wrappers: all_terms,
         stop_flag: main_stop_flag.clone(),
         stop_ct: main_num_stopped.clone(),
+        client: Arc::new(Client::new()),
     };
 
     for (_, term_info) in state.all_wrappers.iter() {
@@ -104,6 +107,11 @@ async fn main() -> ExitCode {
             .route("/webreg/get_course_info/:term", get(api_get_course_info))
             .route("/webreg/get_prereqs/:term", get(api_get_prereqs))
             .route("/webreg/search_courses/:term", get(api_get_search_courses))
+            .route("/scraper/term_status/:term", get(api_get_term_status))
+            .route(
+                "/scraper/login_script/:term/:stat_type",
+                get(api_get_login_script_stats),
+            )
             .with_state(state);
 
         // with_graceful_shutdown

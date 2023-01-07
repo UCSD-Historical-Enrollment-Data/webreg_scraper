@@ -7,11 +7,17 @@ use tokio::sync::Mutex;
 use webweg::reqwest::Client;
 use webweg::wrapper::{CourseLevelFilter, SearchRequestBuilder, WebRegWrapper};
 
+/// A structure that represents the current state of all wrappers.
 #[derive(Clone)]
 pub struct WrapperState {
+    /// A map containing all active scrapers, grouped by term.
     pub all_wrappers: WrapperMap,
+    /// The stop flag; i.e., the flag that indicates whether the scrapers should be stopped.
     pub stop_flag: Arc<AtomicBool>,
+    /// The number of scrapers that have stopped operating for this current session.
     pub stop_ct: Arc<AtomicUsize>,
+    /// The client that can be used to make requests.
+    pub client: Arc<Client>,
 }
 
 pub type WrapperMap = HashMap<String, Arc<TermInfo>>;
@@ -21,12 +27,13 @@ pub type WrapperMap = HashMap<String, Arc<TermInfo>>;
 pub struct TermInfo {
     pub term: String,
     pub alias: Option<String>,
-    pub recovery: Option<AddressPortInfo>,
+    pub recovery: AddressPortInfo,
     pub cooldown: f64,
     pub search_query: Vec<SearchRequestBuilder>,
     pub apply_term: bool,
     pub scraper_wrapper: Mutex<WebRegWrapper>,
     pub general_wrapper: Mutex<WebRegWrapper>,
+    pub is_running: AtomicBool,
 }
 
 impl From<&ConfigTermDatum> for TermInfo {
@@ -40,6 +47,7 @@ impl From<&ConfigTermDatum> for TermInfo {
             apply_term: value.apply_before_use,
             scraper_wrapper: Mutex::new(WebRegWrapper::new(Client::new(), "", value.term.as_str())),
             general_wrapper: Mutex::new(WebRegWrapper::new(Client::new(), "", value.term.as_str())),
+            is_running: AtomicBool::new(false),
         };
 
         if cfg!(feature = "scraper") {

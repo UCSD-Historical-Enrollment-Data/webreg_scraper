@@ -72,17 +72,19 @@ pub async fn run_tracker(
     // initial delay and immediately try to fetch the cookies.
     let mut first_passed = false;
     loop {
+        wrapper_info.is_running.store(true, Ordering::SeqCst);
         track_webreg_enrollment(&wrapper_info.scraper_wrapper, &wrapper_info, &stop_flag).await;
+        wrapper_info.is_running.store(false, Ordering::SeqCst);
 
         if stop_flag.load(Ordering::SeqCst) {
             break;
         }
 
         // If we're here, this means something went wrong.
-        let address = match wrapper_info.recovery.as_ref() {
-            Some(p) => format!("{}:{}", p.address, p.port),
-            None => break,
-        };
+        let address = format!(
+            "{}:{}",
+            wrapper_info.recovery.address, wrapper_info.recovery.port
+        );
 
         // Basically, keep on trying until we get back into WebReg.
         let mut success = false;
@@ -288,11 +290,9 @@ pub async fn track_webreg_enrollment(
                 Ok(r) if !r.is_empty() => {
                     fail_count = 0;
                     println!(
-                        "[{}] [{}] Found {} section(s) for {}",
+                        "[{}] [{}] Pinged successfully!",
                         info.term,
                         get_pretty_time(),
-                        r.len(),
-                        r[0].subj_course_id
                     );
                 }
                 #[cfg(feature = "scraper")]
