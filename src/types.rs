@@ -128,6 +128,8 @@ pub struct ConfigScraper {
     /// Information about what terms the scraper will be gathering data for.
     #[serde(rename = "wrapperData")]
     pub terms: Vec<ConfigTermDatum>,
+    /// Whether the logging should be verbose or not.
+    pub verbose: bool,
 }
 
 /// A structure that represents a specific term that the scraper should consider.
@@ -151,7 +153,7 @@ pub struct ConfigTermDatum {
     ///
     /// If this is not specified, then the program will exit upon failing to get any data.
     #[serde(rename = "recoveryInfo")]
-    pub recovery_info: Option<AddressPortInfo>,
+    pub recovery_info: AddressPortInfo,
     /// The delay between each individual request for a course, in seconds.
     pub cooldown: f64,
     /// The courses that the scraper should be gathering data for.
