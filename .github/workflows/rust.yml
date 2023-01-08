@@ -36,7 +36,11 @@ jobs:
       - name: Format
         run: cargo fmt --all -- --check
       - name: Clippy
-        uses: actions-rs/clippy-check@v1
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          args: --all-targets --all-features
+        run: cargo clippy --all-targets --all-features
+
+      # Don't use clippy-check for now as it is currently using a deprecated version of Node.
+      # - name: Clippy
+      #   uses: actions-rs/clippy-check@v1
+      #   with:
+      #     token: ${{ secrets.GITHUB_TOKEN }}
+      #     args: --all-targets --all-features

@@ -13,6 +13,8 @@ env:
 # https://docs.github.com/en/actions/using-jobs/using-a-matrix-for-your-jobs
 # https://github.com/taiki-e/upload-rust-binary-action
 jobs:
+  # Compiling every possible feature is probably unnecessary and we can probably just
+  # comment this specific job out for now.
   publish_specific:
     name: Publish(${{ matrix.features }}) - ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
@@ -22,7 +24,7 @@ jobs:
         features: ["api", "scraper"]
 
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
       - uses: taiki-e/upload-rust-binary-action@v1
         with:
           bin: ${{ github.event.repository.name }}
@@ -44,7 +46,7 @@ jobs:
           - windows-latest
 
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
       - uses: taiki-e/upload-rust-binary-action@v1
         with:
           bin: ${{ github.event.repository.name }}
