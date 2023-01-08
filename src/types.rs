@@ -25,14 +25,23 @@ pub type WrapperMap = HashMap<String, Arc<TermInfo>>;
 /// A structure that holds information relating to the scraper and, more importantly, the
 /// scraper instances themselves.
 pub struct TermInfo {
+    /// The term associated with this scraper.
     pub term: String,
+    /// The alias for this term, if any.
     pub alias: Option<String>,
+    /// The recovery/login address information.
     pub recovery: AddressPortInfo,
+    /// The cooldown, in seconds, between requests.
     pub cooldown: f64,
+    /// The courses to search for.
     pub search_query: Vec<SearchRequestBuilder>,
+    /// Whether to explicitly switch to the specified term before using the scraper.
     pub apply_term: bool,
+    /// The wrapper specifically for the scraper.
     pub scraper_wrapper: Mutex<WebRegWrapper>,
+    /// The wrapper specifically for general requests.
     pub general_wrapper: Mutex<WebRegWrapper>,
+    /// Whether the scrapers are running.
     pub is_running: AtomicBool,
 }
 
@@ -81,48 +90,8 @@ impl From<&ConfigTermDatum> for TermInfo {
     }
 }
 
-/// A structure that represents a configuration file specifically for the scraper. An example
-/// configuration file may look like the following:
-/// ```json
-/// {
-///     "configName": "DEBUG",
-///     "address": "127.0.0.1",
-///     "port": 8080,
-///     "wrapperData": [
-///         {
-///             "term": "WI23",
-///             "recoveryInfo": {
-///                 "address": "127.0.0.1",
-///                 "port": 3000
-///             },
-///             "cooldown": 1.25,
-///             "searchQuery": [
-///                 {
-///                     "levels": ["g"],
-///                     "departments": ["MATH", "CSE", "COGS", "ECE"]
-///                 },
-///                 {
-///                     "levels": ["l", "u", "g"],
-///                     "departments": []
-///                 }
-///             ],
-///             "applyBeforeUse": false
-///         },
-///         {
-///             "term": "FA22",
-///             "alias": "FA22NS",
-///             "cooldown": 1.25,
-///             "searchQuery": [
-///                 {
-///                     "levels": ["l", "u", "g"],
-///                     "departments": ["MATH", "CSE", "COGS"]
-///                 }
-///             ],
-///             "applyBeforeUse": false
-///         }
-///     ]
-/// }
-/// ```
+/// A structure that represents a configuration file specifically for the scraper. See the
+/// `config.example.json` file and the README for documentation.
 #[derive(Serialize, Deserialize)]
 pub struct ConfigScraper {
     /// The name of the configuration. This is used solely for making it easier to

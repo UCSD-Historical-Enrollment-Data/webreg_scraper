@@ -8,55 +8,35 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
+  RUSTFLAGS: "-Dwarnings"
 
 jobs:
-  build_api:
-    name: api only / compilation
+  validate_features:
+    name: ${{ matrix.feature }} only / compile
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        feature: ["api", "scraper"]
+
+    steps:
+      - uses: actions/checkout@v3
+      - name: Check
+        run: cargo check --no-default-features --features ${{ matrix.feature }}
+      - name: Clippy
+        run: cargo clippy --all-targets --all-features --no-default-features --features ${{ matrix.feature }}
+
+  validate_general:
+    name: general / compilation & style
     runs-on: ubuntu-latest
 
     steps:
       - uses: actions/checkout@v3
       - name: Build
-        run: cargo build --no-default-features --features api --verbose
-      - name: Clippy
-        run: cargo clippy --no-default-features --features api
-
-
-  build_scraper:
-    name: scraper only / compilation
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@v3
-      - name: Build
-        run: cargo build --no-default-features --features scraper --verbose
-      - name: Clippy
-        run: cargo clippy --no-default-features --features scraper
-
-
-  general_ubuntu:
-    name: general(ubuntu) / compilation & style
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@v3
-      - name: Build
-        run: cargo build --verbose
-      - name: Clippy
-        run: cargo clippy
+        run: cargo check
       - name: Format
-        run: cargo fmt --check
-
-
-  general_windows:
-    name: general(windows) / compilation & style
-    runs-on: windows-latest
-
-    steps:
-      - uses: actions/checkout@v3
-      - name: Build
-        run: cargo build --verbose
+        run: cargo fmt --all -- --check
       - name: Clippy
-        run: cargo clippy
-      - name: Format
-        run: cargo fmt --check
+      - uses: actions-rs/clippy-check@v1
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          args: --all-targets --all-features
