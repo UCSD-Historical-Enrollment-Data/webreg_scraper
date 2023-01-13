@@ -4,13 +4,14 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
 use std::process::ExitCode;
-use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize};
 use std::sync::Arc;
 use std::time::Duration;
 
-use tracing::log::log;
 use webweg::reqwest::Client;
 
+#[cfg(feature = "scraper")]
+use std::sync::atomic::Ordering;
 #[cfg(feature = "api")]
 use {
     crate::api::status_api::{api_get_login_script_stats, api_get_term_status},
@@ -154,7 +155,7 @@ async fn main() -> ExitCode {
         #[cfg(not(feature = "scraper"))]
         server
             .with_graceful_shutdown(async {
-                log!("Web server has been stopped.");
+                println!("Web server has been stopped.");
             })
             .await
             .unwrap();
