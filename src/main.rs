@@ -1,28 +1,35 @@
 #![allow(dead_code)]
-mod export;
-mod schedule;
-mod tracker;
-mod util;
 
-use crate::tracker::run_tracker;
-
-use once_cell::sync::Lazy;
-use rocket::response::content;
-use rocket::serde::json::Json;
-use rocket::serde::{Deserialize, Serialize};
-use rocket::{get, post, routes};
-use serde_json::json;
 use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
 use std::process::ExitCode;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize};
+use std::sync::Arc;
 use std::time::Duration;
-use tokio::sync::Mutex;
+
 use webweg::reqwest::Client;
-use webweg::wrapper::{
-    CourseLevelFilter, SearchRequestBuilder, SearchType, WebRegWrapper, WrapperError,
+
+#[cfg(feature = "scraper")]
+use std::sync::atomic::Ordering;
+#[cfg(feature = "api")]
+use {
+    crate::api::status_api::{api_get_login_script_stats, api_get_term_status},
+    crate::api::webreg_api::{api_get_course_info, api_get_prereqs, api_get_search_courses},
+    axum::routing::get,
+    axum::Router,
 };
+
+use crate::tracker::run_tracker;
+use crate::types::{ConfigScraper, WrapperMap, WrapperState};
+
+mod api;
+mod tracker;
+mod types;
+mod util;
+
+#[cfg(not(any(feature = "scraper", feature = "api")))]
+compile_error!("A feature ('scraper' and/or 'api') must be specified!");
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
@@ -30,366 +37,167 @@ const VERSION: &str = env!("CARGO_PKG_VERSION");
 /// two scrapers.
 pub const STARTUP_COOLDOWN: f64 = 1.5;
 
-pub struct TermSetting<'a> {
-    /// The term, to be recognized by WebReg.
-    term: &'a str,
+#[tokio::main]
+async fn main() -> ExitCode {
+    tracing_subscriber::fmt::init();
+    println!("WebRegScraper/API Version {}", VERSION);
+    // First, get the configuration file.
+    let config_path = match std::env::args().skip(1).last() {
+        Some(s) => s,
+        None => {
+            println!("[!] Please provide the path to a configuration file for the scraper.");
+            return ExitCode::FAILURE;
+        }
+    };
 
-    /// The term alias, to be used for the file name. If `None`, defaults
-    /// to `term`.
-    alias: Option<&'a str>,
-
-    /// The recovery URL, i.e., the URL the wrapper should
-    /// make a request to so it can get new cookies to login
-    /// with.
-    port: Option<usize>,
-
-    /// The cooldown, if any, between requests. If none is
-    /// specified, then this will use the default cooldown.
-    cooldown: f64,
-
-    /// The courses to search for this term.
-    search_query: Vec<SearchRequestBuilder>,
-
-    /// Whether this term needs to be applied manually to the wrapper
-    /// before use.
-    apply_term: bool,
-}
-
-/// All terms and their associated "recovery URLs"
-pub static TERMS: Lazy<Vec<TermSetting<'static>>> = Lazy::new(|| {
-    Vec::from([TermSetting {
-        term: "WI23",
-        alias: None,
-        port: Some(3001),
-        apply_term: false,
-
-        #[cfg(debug_assertions)]
-        cooldown: 3.0,
-        #[cfg(not(debug_assertions))]
-        cooldown: 0.40,
-
-        #[cfg(debug_assertions)]
-        search_query: vec![SearchRequestBuilder::new()
-            .filter_courses_by(CourseLevelFilter::LowerDivision)
-            .filter_courses_by(CourseLevelFilter::UpperDivision)
-            .add_department("MATH")
-            .add_department("CSE")
-            .add_department("COGS")],
-
-        #[cfg(not(debug_assertions))]
-        search_query: vec![
-            // For fall, we want *all* lower- and upper-division courses
-            SearchRequestBuilder::new()
-                .filter_courses_by(CourseLevelFilter::LowerDivision)
-                .filter_courses_by(CourseLevelFilter::UpperDivision),
-            // But only graduate math/cse/ece/cogs courses
-            SearchRequestBuilder::new()
-                .filter_courses_by(CourseLevelFilter::Graduate)
-                .add_department("MATH")
-                .add_department("CSE")
-                .add_department("ECE")
-                .add_department("COGS"),
-        ],
-    }])
-});
-
-pub struct WebRegHandler<'a> {
-    /// Wrapper for the scraper.
-    scraper_wrapper: Mutex<WebRegWrapper>,
-
-    /// Wrapper for general requests made inbound by, say, a Discord bot.
-    general_wrapper: Mutex<WebRegWrapper>,
-
-    /// The term settings.
-    term_setting: &'a TermSetting<'a>,
-
-    /// Whether the associated scraper is running.
-    is_running: AtomicBool,
-}
-
-// Init all wrappers here.
-static WEBREG_WRAPPERS: Lazy<HashMap<&str, WebRegHandler>> = Lazy::new(|| {
-    let mut map: HashMap<&str, WebRegHandler> = HashMap::new();
-
-    for term_setting in TERMS.iter() {
-        let cookie = get_file_content(&format!("cookie_{}.txt", term_setting.term));
-        let cookie = cookie.trim();
-        map.insert(
-            term_setting.term,
-            WebRegHandler {
-                scraper_wrapper: Mutex::new(WebRegWrapper::new(
-                    Client::new(),
-                    cookie.to_string(),
-                    term_setting.term,
-                )),
-                general_wrapper: Mutex::new(WebRegWrapper::new(
-                    Client::new(),
-                    cookie.to_string(),
-                    term_setting.term,
-                )),
-                term_setting,
-                is_running: AtomicBool::new(false),
-            },
-        );
+    let config_path = Path::new(config_path.as_str());
+    if !config_path.exists() {
+        println!("[!] Invalid path. Please provide the path to a configuration file.");
+        return ExitCode::FAILURE;
     }
 
-    map
-});
+    let config_info = match serde_json::from_str::<ConfigScraper>(
+        fs::read_to_string(config_path)
+            .expect("Unable to read file.")
+            .as_str(),
+    ) {
+        Ok(config) => config,
+        Err(err) => {
+            println!(
+                "[!] Bad config file. Please fix it and then try again.\n{}",
+                err
+            );
+            return ExitCode::FAILURE;
+        }
+    };
 
-// Create a global client since it doesn't really matter what client we're using.
-// All this is doing is getting stats from the login script.
-static CLIENT: Lazy<Client> = Lazy::new(Client::new);
+    println!("Loaded: {}", config_info.config_name);
+    #[cfg(feature = "scraper")]
+    println!("\twith feature: scraper");
+    #[cfg(feature = "api")]
+    println!("\twith feature: api");
 
-// The stop flag is our way of communicating to each wrapper that we're stopping
-// the process completely. We use a stop flag so we can flush all non-empty buffers
-// before quitting the program.
-static STOP_FLAG: Lazy<AtomicBool> = Lazy::new(|| AtomicBool::new(false));
+    let mut all_terms: WrapperMap = HashMap::new();
+    for info in &config_info.terms {
+        all_terms.insert(info.term.to_owned(), Arc::new(info.into()));
+    }
 
-#[tokio::main(flavor = "current_thread")]
-async fn main() -> ExitCode {
-    println!("WebRegWrapper Version {}", VERSION);
+    // These two variables will be used to determine whether the scraper needs to stop.
+    let main_num_stopped = Arc::new(AtomicUsize::new(0));
+    let main_stop_flag = Arc::new(AtomicBool::new(false));
 
-    for (_, wg_handler) in WEBREG_WRAPPERS.iter() {
+    let state = WrapperState {
+        all_wrappers: all_terms,
+        stop_flag: main_stop_flag.clone(),
+        stop_ct: main_num_stopped.clone(),
+        client: Arc::new(Client::new()),
+    };
+
+    for (_, term_info) in state.all_wrappers.iter() {
+        let this_term_info = term_info.clone();
+        let this_stop_flag = state.stop_flag.clone();
+        let this_stop_ct = main_num_stopped.clone();
         tokio::spawn(async move {
-            // wg_handler has a static lifetime, so we can do this just fine.
-            run_tracker(wg_handler).await;
+            run_tracker(
+                this_term_info,
+                this_stop_flag,
+                this_stop_ct,
+                config_info.verbose,
+            )
+            .await;
         });
 
         tokio::time::sleep(Duration::from_secs_f64(STARTUP_COOLDOWN)).await;
     }
 
-    let _ = rocket::build()
-        .mount(
-            "/",
-            routes![
-                get_course_info,
-                search_courses,
-                get_prereqs,
-                get_stat,
-                get_status
-            ],
-        )
-        .launch()
-        .await
-        .unwrap();
-
-    // Rocket should only die if CTRL-C is detected
-    println!("CTRL-C Detected. Stopping...");
-    STOP_FLAG.store(true, Ordering::SeqCst);
-
-    while WEBREG_WRAPPERS
-        .values()
-        .any(|x| x.is_running.load(Ordering::SeqCst))
+    #[cfg(feature = "api")]
     {
-        // Keep looping basically. Because we're working with a
-        // single-threaded environment, we do want to sleep from time
-        // to time so the other "green threads" have the opportunity
-        // to run.
-        tokio::time::sleep(Duration::from_secs(1)).await;
+        let app = Router::new()
+            .route("/webreg/course_info/:term", get(api_get_course_info))
+            .route("/webreg/prereqs/:term", get(api_get_prereqs))
+            .route("/webreg/search_courses/:term", get(api_get_search_courses))
+            .route("/scraper/term_status/:term", get(api_get_term_status))
+            .route(
+                "/scraper/login_script/:term/:stat_type",
+                get(api_get_login_script_stats),
+            )
+            .with_state(state);
+
+        let server = axum::Server::bind(
+            &format!(
+                "{}:{}",
+                config_info.api_info.address, config_info.api_info.port
+            )
+            .parse()
+            .unwrap(),
+        )
+        .serve(app.into_make_service());
+
+        // With the API feature enabled, we need to consider two cases.
+
+        // Case 1:
+        // If the scraper feature is ENABLED, then we need to make sure all scrapers
+        // are stopped before we shut the process down. That way, any remaining data
+        // in the buffers are written to the file.
+        #[cfg(feature = "scraper")]
+        server
+            .with_graceful_shutdown(shutdown_signal(
+                main_num_stopped.clone(),
+                main_stop_flag.clone(),
+                config_info.terms.len(),
+            ))
+            .await
+            .unwrap();
+
+        // Case 2:
+        // Otherwise, we can just shut the server down without needing to wait for
+        // anything.
+        #[cfg(not(feature = "scraper"))]
+        server
+            .with_graceful_shutdown(async {
+                tokio::signal::ctrl_c()
+                    .await
+                    .expect("Expected shutdown signal handler.");
+
+                println!("Web server has been stopped.");
+            })
+            .await
+            .unwrap();
+    }
+
+    // Otherwise, if we're not using the API feature, then we must have
+    // the scraper feature.
+    #[cfg(not(feature = "api"))]
+    {
+        shutdown_signal(
+            main_num_stopped.clone(),
+            main_stop_flag.clone(),
+            config_info.terms.len(),
+        )
+        .await;
     }
 
     ExitCode::SUCCESS
 }
 
-#[inline(always)]
-fn process_return<T>(search_res: Result<T, WrapperError>) -> content::RawJson<String>
-where
-    T: Serialize,
-{
-    match search_res {
-        Ok(x) => content::RawJson(serde_json::to_string(&x).unwrap_or_else(|_| "[]".to_string())),
-        Err(e) => content::RawJson(json!({ "error": e.to_string() }).to_string()),
+/// Handles shutting down the server.
+///
+/// # Parameters
+/// - `num_stopped`: The number of scrapers that have stopped.
+/// - `stop_flag`: The flag indicating whether the scrapers should stop.
+/// - `num_total`: The total number of terms.
+#[cfg(feature = "scraper")]
+async fn shutdown_signal(
+    num_stopped: Arc<AtomicUsize>,
+    stop_flag: Arc<AtomicBool>,
+    num_total: usize,
+) {
+    tokio::signal::ctrl_c()
+        .await
+        .expect("Expected shutdown signal handler.");
+
+    stop_flag.store(true, Ordering::SeqCst);
+    while num_stopped.load(Ordering::SeqCst) < num_total {
+        tokio::time::sleep(Duration::from_secs(1)).await;
     }
-}
-
-enum PortType {
-    Found(usize),
-    InvalidTerm,
-    NoPortDefined,
-}
-
-// We could delegate these endpoints to the actual login script itself and have it
-// deal with these requests, but I want to make everything more uniform by providing
-// all endpoints here. Plus, all ports and terms are defined here anyways which makes
-// it easier for the end user to use these endpoints (it would be more difficult if
-// these endpoints had to be accessed from the login script itself).
-#[get("/stat/<stat_type>/<term>")]
-async fn get_stat(stat_type: String, term: String) -> content::RawJson<String> {
-    let port_to_use = {
-        if let Some(wg_handler) = WEBREG_WRAPPERS.get(&term.as_str()) {
-            if let Some(port) = wg_handler.term_setting.port {
-                PortType::Found(port)
-            } else {
-                PortType::NoPortDefined
-            }
-        } else {
-            PortType::InvalidTerm
-        }
-    };
-
-    match port_to_use {
-        PortType::Found(port) => match stat_type.as_str() {
-            "start" | "history" => {
-                match CLIENT
-                    .get(format!("http://localhost:{}/{}", port, stat_type))
-                    .send()
-                    .await
-                {
-                    Ok(o) => {
-                        let default_val = match stat_type.as_str() {
-                            "start" => "[]",
-                            "history" => "0",
-                            // Should never hit by earlier condition
-                            _ => "{}",
-                        };
-
-                        let data = o.text().await.unwrap_or_else(|_| default_val.to_string());
-                        content::RawJson(data)
-                    }
-                    Err(e) => content::RawJson(json!({ "error": format!("{}", e) }).to_string()),
-                }
-            }
-            _ => content::RawJson(
-                json!({ "error": format!("Invalid stat type: {}", stat_type) }).to_string(),
-            ),
-        },
-        PortType::InvalidTerm => content::RawJson(
-            json!({
-                "error": "Invalid term specified."
-            })
-            .to_string(),
-        ),
-        PortType::NoPortDefined => content::RawJson(
-            json!({
-                "error": "Term exists but no port defined."
-            })
-            .to_string(),
-        ),
-    }
-}
-
-#[get("/status/<term>")]
-async fn get_status(term: String) -> content::RawJson<String> {
-    if let Some(wg_handler) = WEBREG_WRAPPERS.get(&term.as_str()) {
-        let status = wg_handler.is_running.load(Ordering::SeqCst);
-        content::RawJson(json!({ "status": status }).to_string())
-    } else {
-        content::RawJson(
-            json!({
-                "error": "Invalid term specified."
-            })
-            .to_string(),
-        )
-    }
-}
-
-#[get("/course/<term>/<subj>/<num>")]
-async fn get_course_info(term: String, subj: String, num: String) -> content::RawJson<String> {
-    if let Some(wg_handler) = WEBREG_WRAPPERS.get(&term.as_str()) {
-        let wg_handler = wg_handler.general_wrapper.lock().await;
-        let res = wg_handler.get_course_info(&subj, &num).await;
-        drop(wg_handler);
-        process_return(res)
-    } else {
-        content::RawJson(
-            json!({
-                "error": "Invalid term specified."
-            })
-            .to_string(),
-        )
-    }
-}
-
-#[get("/prereqs/<term>/<subj>/<num>")]
-async fn get_prereqs(term: String, subj: String, num: String) -> content::RawJson<String> {
-    if let Some(wg_handler) = WEBREG_WRAPPERS.get(&term.as_str()) {
-        let wg_handler = wg_handler.general_wrapper.lock().await;
-        let res = wg_handler.get_prereqs(&subj, &num).await;
-        drop(wg_handler);
-        process_return(res)
-    } else {
-        content::RawJson(
-            json!({
-                "error": "Invalid term specified."
-            })
-            .to_string(),
-        )
-    }
-}
-
-fn get_file_content(file_name: &str) -> String {
-    let file = Path::new(file_name);
-    if !file.exists() {
-        eprintln!("'{}' file does not exist. Try again.", file_name);
-        return "".to_string();
-    }
-
-    fs::read_to_string(file).unwrap_or_else(|_| "".to_string())
-}
-
-#[derive(Debug, PartialEq, Eq, Deserialize)]
-struct SearchQuery {
-    subjects: Vec<String>,
-    courses: Vec<String>,
-    departments: Vec<String>,
-    instructor: Option<String>,
-    title: Option<String>,
-    only_allow_open: bool,
-    show_lower_div: bool,
-    show_upper_div: bool,
-    show_grad_div: bool,
-}
-
-#[post("/search/<term>", format = "json", data = "<query>")]
-async fn search_courses(term: String, query: Json<SearchQuery>) -> content::RawJson<String> {
-    // kek I didn't realize how scuffed this was
-    if let Some(wg_handler) = WEBREG_WRAPPERS.get(&term.as_str()) {
-        let mut query_builder = SearchRequestBuilder::new();
-        for q in &query.subjects {
-            query_builder = query_builder.add_subject(q.as_str());
-        }
-
-        for q in &query.courses {
-            query_builder = query_builder.add_course(q.as_str());
-        }
-
-        for q in &query.departments {
-            query_builder = query_builder.add_department(q.as_str());
-        }
-
-        query_builder = match query.instructor {
-            Some(ref r) => query_builder.set_instructor(r),
-            None => query_builder,
-        };
-
-        query_builder = match query.title {
-            Some(ref r) => query_builder.set_title(r),
-            None => query_builder,
-        };
-
-        if query.only_allow_open {
-            query_builder = query_builder.only_allow_open();
-        }
-
-        if query.show_grad_div {
-            query_builder = query_builder.filter_courses_by(CourseLevelFilter::Graduate);
-        }
-
-        if query.show_upper_div {
-            query_builder = query_builder.filter_courses_by(CourseLevelFilter::UpperDivision);
-        }
-
-        if query.show_lower_div {
-            query_builder = query_builder.filter_courses_by(CourseLevelFilter::LowerDivision);
-        }
-
-        let wg_handler = wg_handler.general_wrapper.lock().await;
-        let search_res = wg_handler
-            .search_courses(SearchType::Advanced(&query_builder))
-            .await;
-        drop(wg_handler);
-        return process_return(search_res);
-    }
-
-    content::RawJson(json!({"error": "Invalid term specified"}).to_string())
 }
