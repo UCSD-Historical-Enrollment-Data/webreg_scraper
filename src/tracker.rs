@@ -74,7 +74,13 @@ pub async fn run_tracker(
     let mut first_passed = false;
     loop {
         wrapper_info.is_running.store(true, Ordering::SeqCst);
-        track_webreg_enrollment(&wrapper_info.scraper_wrapper, &wrapper_info, &stop_flag, verbose).await;
+        track_webreg_enrollment(
+            &wrapper_info.scraper_wrapper,
+            &wrapper_info,
+            &stop_flag,
+            verbose,
+        )
+        .await;
         wrapper_info.is_running.store(false, Ordering::SeqCst);
 
         if stop_flag.load(Ordering::SeqCst) {
