@@ -8,6 +8,7 @@ use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
+use tracing::log::log;
 use webweg::reqwest::Client;
 
 #[cfg(feature = "api")]
@@ -96,7 +97,13 @@ async fn main() -> ExitCode {
         let this_stop_flag = state.stop_flag.clone();
         let this_stop_ct = main_num_stopped.clone();
         tokio::spawn(async move {
-            run_tracker(this_term_info, this_stop_flag, this_stop_ct).await;
+            run_tracker(
+                this_term_info,
+                this_stop_flag,
+                this_stop_ct,
+                config_info.verbose,
+            )
+            .await;
         });
 
         tokio::time::sleep(Duration::from_secs_f64(STARTUP_COOLDOWN)).await;
@@ -115,10 +122,7 @@ async fn main() -> ExitCode {
             )
             .with_state(state);
 
-        // with_graceful_shutdown
-        // https://github.com/joelparkerhenderson/demo-rust-axum/blob/main/src/main.rs
-        // line 107
-        axum::Server::bind(
+        let server = axum::Server::bind(
             &format!(
                 "{}:{}",
                 config_info.api_info.address, config_info.api_info.port
@@ -126,16 +130,38 @@ async fn main() -> ExitCode {
             .parse()
             .unwrap(),
         )
-        .serve(app.into_make_service())
-        .with_graceful_shutdown(shutdown_signal(
-            main_num_stopped.clone(),
-            main_stop_flag.clone(),
-            config_info.terms.len(),
-        ))
-        .await
-        .unwrap();
+        .serve(app.into_make_service());
+
+        // With the API feature enabled, we need to consider two cases.
+
+        // Case 1:
+        // If the scraper feature is ENABLED, then we need to make sure all scrapers
+        // are stopped before we shut the process down. That way, any remaining data
+        // in the buffers are written to the file.
+        #[cfg(feature = "scraper")]
+        server
+            .with_graceful_shutdown(shutdown_signal(
+                main_num_stopped.clone(),
+                main_stop_flag.clone(),
+                config_info.terms.len(),
+            ))
+            .await
+            .unwrap();
+
+        // Case 2:
+        // Otherwise, we can just shut the server down without needing to wait for
+        // anything.
+        #[cfg(not(feature = "scraper"))]
+        server
+            .with_graceful_shutdown(async {
+                log!("Web server has been stopped.");
+            })
+            .await
+            .unwrap();
     }
 
+    // Otherwise, if we're not using the API feature, then we must have
+    // the scraper feature.
     #[cfg(not(feature = "api"))]
     {
         shutdown_signal(
@@ -155,6 +181,7 @@ async fn main() -> ExitCode {
 /// - `num_stopped`: The number of scrapers that have stopped.
 /// - `stop_flag`: The flag indicating whether the scrapers should stop.
 /// - `num_total`: The total number of terms.
+#[cfg(feature = "scraper")]
 async fn shutdown_signal(
     num_stopped: Arc<AtomicUsize>,
     stop_flag: Arc<AtomicBool>,

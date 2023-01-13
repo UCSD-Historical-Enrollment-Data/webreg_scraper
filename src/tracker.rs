@@ -52,6 +52,7 @@ pub async fn run_tracker(
     wrapper_info: Arc<TermInfo>,
     stop_flag: Arc<AtomicBool>,
     stop_ct: Arc<AtomicUsize>,
+    verbose: bool,
 ) {
     if wrapper_info.apply_term {
         let _ = wrapper_info
@@ -73,7 +74,7 @@ pub async fn run_tracker(
     let mut first_passed = false;
     loop {
         wrapper_info.is_running.store(true, Ordering::SeqCst);
-        track_webreg_enrollment(&wrapper_info.scraper_wrapper, &wrapper_info, &stop_flag).await;
+        track_webreg_enrollment(&wrapper_info.scraper_wrapper, &wrapper_info, &stop_flag, verbose).await;
         wrapper_info.is_running.store(false, Ordering::SeqCst);
 
         if stop_flag.load(Ordering::SeqCst) {
@@ -180,6 +181,7 @@ pub async fn track_webreg_enrollment(
     wrapper: &Mutex<WebRegWrapper>,
     info: &TermInfo,
     stop_flag: &Arc<AtomicBool>,
+    verbose: bool,
 ) {
     // If the wrapper doesn't have a valid cookie, then return.
     if !wrapper.lock().await.is_valid().await {
@@ -289,22 +291,26 @@ pub async fn track_webreg_enrollment(
                 #[cfg(not(feature = "scraper"))]
                 Ok(r) if !r.is_empty() => {
                     fail_count = 0;
-                    println!(
-                        "[{}] [{}] Pinged successfully!",
-                        info.term,
-                        get_pretty_time(),
-                    );
+                    if verbose {
+                        println!(
+                            "[{}] [{}] Pinged successfully!",
+                            info.term,
+                            get_pretty_time(),
+                        );
+                    }
                 }
                 #[cfg(feature = "scraper")]
                 Ok(r) if !r.is_empty() => {
                     fail_count = 0;
-                    println!(
-                        "[{}] [{}] Processing {} section(s) for {}",
-                        info.term,
-                        get_pretty_time(),
-                        r.len(),
-                        r[0].subj_course_id
-                    );
+                    if verbose {
+                        println!(
+                            "[{}] [{}] Processing {} section(s) for {}",
+                            info.term,
+                            get_pretty_time(),
+                            r.len(),
+                            r[0].subj_course_id
+                        );
+                    }
 
                     let time = get_epoch_time();
                     // Write to raw CSV dataset

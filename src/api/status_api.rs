@@ -7,6 +7,7 @@ use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use axum::Json;
 use serde_json::json;
+use tracing::info;
 
 use crate::api::util::api_get_general;
 use crate::types::WrapperState;
@@ -22,6 +23,8 @@ pub async fn api_get_term_status(
     Path(term): Path<String>,
     State(s): State<WrapperState>,
 ) -> Response {
+    info!("[api_get_term_status] Called with path {term}.");
+
     api_get_general(
         term.as_str(),
         move |term_info| async move {
@@ -44,6 +47,8 @@ pub async fn api_get_login_script_stats(
     Path((term, stat_type)): Path<(String, String)>,
     State(s): State<WrapperState>,
 ) -> Response {
+    info!("[api_get_term_status] Called with path ({term}, {stat_type}).");
+
     if stat_type != "start" && stat_type != "history" {
         return (
             StatusCode::BAD_REQUEST,

@@ -1,9 +1,12 @@
 #![cfg(feature = "api")]
 
+use std::fmt::{Display, Formatter};
+
 use axum::extract::{Path, Query, State};
 use axum::response::Response;
 use axum::Json;
 use serde::Deserialize;
+use tracing::info;
 use webweg::wrapper::{CourseLevelFilter, DayOfWeek, SearchRequestBuilder, SearchType};
 
 use crate::api::util::{api_get_general, process_return};
@@ -13,6 +16,12 @@ use crate::types::WrapperState;
 pub struct CourseQueryStr {
     subject: String,
     number: String,
+}
+
+impl Display for CourseQueryStr {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        writeln!(f, "{} {}", self.subject, self.number)
+    }
 }
 
 /// An endpoint for getting the course information for a particular term.
@@ -27,6 +36,8 @@ pub async fn api_get_course_info(
     Query(crsc): Query<CourseQueryStr>,
     State(s): State<WrapperState>,
 ) -> Response {
+    info!("[api_get_course_info] Called with path {term} and query: {crsc}");
+
     api_get_general(
         term.as_str(),
         move |term_info| async move {
@@ -50,6 +61,8 @@ pub async fn api_get_prereqs(
     Query(crsc): Query<CourseQueryStr>,
     State(s): State<WrapperState>,
 ) -> Response {
+    info!("[api_get_prereqs] Called with path {term} and query: {crsc}");
+
     api_get_general(
         term.as_str(),
         move |term_info| async move {
@@ -79,6 +92,69 @@ pub struct CourseSearchJsonBody {
     days: Option<Vec<String>>,
 }
 
+impl Display for CourseSearchJsonBody {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        writeln!(f, "Course Search JSON Body.")?;
+        if let Some(s) = &self.subjects {
+            writeln!(f, "\tSubjects: {}", s.join(", "))?;
+        }
+
+        if let Some(c) = &self.courses {
+            writeln!(f, "\tCourses: {}", c.join(", "))?;
+        }
+
+        if let Some(d) = &self.departments {
+            writeln!(f, "\tDepartments: {}", d.join(", "))?;
+        }
+
+        if let Some(ins) = &self.instructor {
+            writeln!(f, "\tInstructor: {ins}")?;
+        }
+
+        if let Some(t) = &self.title {
+            writeln!(f, "\tTitle: {t}")?;
+        }
+
+        if let Some(open) = self.only_allow_open {
+            writeln!(f, "\tOnly Allow Open: {open}")?;
+        }
+
+        if let Some(lower) = self.show_lower_div {
+            writeln!(f, "\tOnly Show Lower: {lower}")?;
+        }
+
+        if let Some(upper) = self.show_upper_div {
+            writeln!(f, "\tOnly Show Upper: {upper}")?;
+        }
+
+        if let Some(grad) = self.show_grad_div {
+            writeln!(f, "\tOnly Show Grad: {grad}")?;
+        }
+
+        if let Some(start_hr) = self.start_hr {
+            writeln!(f, "\tStart Hr: {start_hr}")?;
+        }
+
+        if let Some(start_min) = self.start_min {
+            writeln!(f, "\tStart Min: {start_min}")?;
+        }
+
+        if let Some(end_hr) = self.end_hr {
+            writeln!(f, "\tEnd Hr: {end_hr}")?;
+        }
+
+        if let Some(end_min) = self.end_min {
+            writeln!(f, "\tEnd Min: {end_min}")?;
+        }
+
+        if let Some(days) = &self.days {
+            writeln!(f, "\tDays: {}", days.join(", "))?;
+        }
+
+        Ok(())
+    }
+}
+
 /// An endpoint for searching for courses for a particular term.
 ///
 /// # Usage
@@ -94,6 +170,11 @@ pub async fn api_get_search_courses(
     // The Json needs to be the last parameter since its request body is being consumed.
     Json(search_info): Json<CourseSearchJsonBody>,
 ) -> Response {
+    info!(
+        "[api_get_search_courses] Called with path {term} and arguments:\n{}",
+        search_info
+    );
+
     api_get_general(
         term.as_str(),
         move |term_info| async move {

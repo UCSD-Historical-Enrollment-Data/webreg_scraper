@@ -84,6 +84,10 @@ impl From<&ConfigTermDatum> for TermInfo {
             // the API and thus only need to add a dummy course.
             info.search_query
                 .push(SearchRequestBuilder::new().add_course("CSE 100"));
+
+            // We can use a 5 second cooldown since it's not like we need to bully WebReg
+            // more than necessary.
+            info.cooldown = 5.0;
         }
 
         info
