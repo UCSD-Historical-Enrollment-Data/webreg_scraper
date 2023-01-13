@@ -256,8 +256,16 @@ pub async fn track_webreg_enrollment(
             break;
         }
 
+        #[cfg(feature = "scraper")]
         println!(
             "[{}] [{}] Found {} results successfully.",
+            info.term,
+            get_pretty_time(),
+            results.len()
+        );
+        #[cfg(not(feature = "scraper"))]
+        println!(
+            "[{}] [{}] Search execution successful ({}).",
             info.term,
             get_pretty_time(),
             results.len()

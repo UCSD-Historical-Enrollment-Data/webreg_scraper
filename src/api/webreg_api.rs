@@ -36,7 +36,7 @@ pub async fn api_get_course_info(
     Query(crsc): Query<CourseQueryStr>,
     State(s): State<WrapperState>,
 ) -> Response {
-    info!("[api_get_course_info] Called with path {term} and query: {crsc}");
+    info!("Called with path {term} and query: {crsc}");
 
     api_get_general(
         term.as_str(),
@@ -61,7 +61,7 @@ pub async fn api_get_prereqs(
     Query(crsc): Query<CourseQueryStr>,
     State(s): State<WrapperState>,
 ) -> Response {
-    info!("[api_get_prereqs] Called with path {term} and query: {crsc}");
+    info!("Called with path {term} and query: {crsc}");
 
     api_get_general(
         term.as_str(),
@@ -170,10 +170,7 @@ pub async fn api_get_search_courses(
     // The Json needs to be the last parameter since its request body is being consumed.
     Json(search_info): Json<CourseSearchJsonBody>,
 ) -> Response {
-    info!(
-        "[api_get_search_courses] Called with path {term} and arguments:\n{}",
-        search_info
-    );
+    info!("Called with path {term} and arguments: {}", search_info);
 
     api_get_general(
         term.as_str(),

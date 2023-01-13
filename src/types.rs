@@ -81,9 +81,8 @@ impl From<&ConfigTermDatum> for TermInfo {
             }
         } else {
             // Otherwise, we're not working with the scraper. This means we're working with
-            // the API and thus only need to add a dummy course.
-            info.search_query
-                .push(SearchRequestBuilder::new().add_course("CSE 100"));
+            // the API and thus only need to add some dummy search queries.
+            info.search_query.push(SearchRequestBuilder::new());
 
             // We can use a 5 second cooldown since it's not like we need to bully WebReg
             // more than necessary.

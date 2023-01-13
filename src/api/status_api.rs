@@ -23,7 +23,7 @@ pub async fn api_get_term_status(
     Path(term): Path<String>,
     State(s): State<WrapperState>,
 ) -> Response {
-    info!("[api_get_term_status] Called with path {term}.");
+    info!("Called with path {term}.");
 
     api_get_general(
         term.as_str(),
@@ -47,7 +47,7 @@ pub async fn api_get_login_script_stats(
     Path((term, stat_type)): Path<(String, String)>,
     State(s): State<WrapperState>,
 ) -> Response {
-    info!("[api_get_term_status] Called with path ({term}, {stat_type}).");
+    info!("Called with path ({term}, {stat_type}).");
 
     if stat_type != "start" && stat_type != "history" {
         return (

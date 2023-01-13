@@ -113,8 +113,8 @@ async fn main() -> ExitCode {
     #[cfg(feature = "api")]
     {
         let app = Router::new()
-            .route("/webreg/get_course_info/:term", get(api_get_course_info))
-            .route("/webreg/get_prereqs/:term", get(api_get_prereqs))
+            .route("/webreg/course_info/:term", get(api_get_course_info))
+            .route("/webreg/prereqs/:term", get(api_get_prereqs))
             .route("/webreg/search_courses/:term", get(api_get_search_courses))
             .route("/scraper/term_status/:term", get(api_get_term_status))
             .route(
@@ -155,6 +155,10 @@ async fn main() -> ExitCode {
         #[cfg(not(feature = "scraper"))]
         server
             .with_graceful_shutdown(async {
+                tokio::signal::ctrl_c()
+                    .await
+                    .expect("Expected shutdown signal handler.");
+
                 println!("Web server has been stopped.");
             })
             .await
