@@ -41,12 +41,12 @@ async function check(term: string, config: IConfiguration): Promise<void> {
 
     // Check the status of each endpoint
     const lookupRes: unknown[] | { "error": string } | null = await tryExecuteAsync(async () => {
-        const data = await AXIOS.get(`http://127.0.0.1:8000/course/${term}/CSE/8A`);
+        const data = await AXIOS.get(`http://127.0.0.1:3000/webreg/course_info/${term}?subject=CSE&number=8A`);
         return data.data;
     });
 
     const statusRes: { "status": boolean } | { "error": string } | null = await tryExecuteAsync(async () => {
-        const data = await AXIOS.get(`http://127.0.0.1:8000/status/${term}`);
+        const data = await AXIOS.get(`http://127.0.0.1:3000/scraper/term_status/${term}`);
         return data.data;
     });
 
