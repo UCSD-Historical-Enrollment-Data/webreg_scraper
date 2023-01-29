@@ -1337,7 +1337,7 @@ dependencies = [
 
 [[package]]
 name = "webreg_scraper"
-version = "0.4.1"
+version = "0.4.2"
 dependencies = [
  "axum",
  "axum-macros",
@@ -1353,9 +1353,9 @@ dependencies = [
 
 [[package]]
 name = "webweg"
-version = "0.7.1"
+version = "0.7.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9ead3d6f448758f373ce4718898b72288f84f9f049d530a0be9aa13cd2dd1d87"
+checksum = "72705f8fe955fde189796b69a34ced1575070bb3a8de0ce40f87394be8a48d0d"
 dependencies = [
  "reqwest",
  "serde",
