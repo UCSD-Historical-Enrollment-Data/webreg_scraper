@@ -5,12 +5,9 @@ use std::fs;
 use std::path::Path;
 use std::process::ExitCode;
 use std::sync::atomic::AtomicBool;
-#[cfg(feature = "scraper")]
-use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use std::time::Duration;
 
-use tracing::info;
 use webweg::reqwest::Client;
 
 #[cfg(feature = "api")]
@@ -20,6 +17,8 @@ use {
     axum::routing::get,
     axum::Router,
 };
+#[cfg(feature = "scraper")]
+use {std::sync::atomic::Ordering, tracing::info};
 
 use crate::tracker::run_tracker;
 use crate::types::{ConfigScraper, WrapperMap, WrapperState};
@@ -154,12 +153,7 @@ async fn main() -> ExitCode {
     // the scraper feature.
     #[cfg(not(feature = "api"))]
     {
-        shutdown_signal(
-            state.clone(),
-            main_stop_flag.clone(),
-            config_info.terms.len(),
-        )
-        .await;
+        shutdown_signal(state.clone(), main_stop_flag.clone()).await;
     }
 
     ExitCode::SUCCESS
