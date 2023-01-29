@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicBool, AtomicUsize};
+use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
@@ -14,8 +14,6 @@ pub struct WrapperState {
     pub all_wrappers: WrapperMap,
     /// The stop flag; i.e., the flag that indicates whether the scrapers should be stopped.
     pub stop_flag: Arc<AtomicBool>,
-    /// The number of scrapers that have stopped operating for this current session.
-    pub stop_ct: Arc<AtomicUsize>,
     /// The client that can be used to make requests.
     pub client: Arc<Client>,
 }

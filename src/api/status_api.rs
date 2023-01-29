@@ -1,6 +1,7 @@
 #![cfg(feature = "api")]
 
 use std::sync::atomic::Ordering;
+use std::sync::Arc;
 
 use axum::extract::{Path, State};
 use axum::http::StatusCode;
@@ -21,7 +22,7 @@ use crate::types::WrapperState;
 /// ```
 pub async fn api_get_term_status(
     Path(term): Path<String>,
-    State(s): State<WrapperState>,
+    State(s): State<Arc<WrapperState>>,
 ) -> Response {
     info!("Called with path {term}.");
 
@@ -45,7 +46,7 @@ pub async fn api_get_term_status(
 /// ```
 pub async fn api_get_login_script_stats(
     Path((term, stat_type)): Path<(String, String)>,
-    State(s): State<WrapperState>,
+    State(s): State<Arc<WrapperState>>,
 ) -> Response {
     info!("Called with path ({term}, {stat_type}).");
 
