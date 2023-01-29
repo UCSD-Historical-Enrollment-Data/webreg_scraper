@@ -1,6 +1,7 @@
 #![cfg(feature = "api")]
 
 use std::fmt::{Display, Formatter};
+use std::sync::Arc;
 
 use axum::extract::{Path, Query, State};
 use axum::response::Response;
@@ -34,7 +35,7 @@ impl Display for CourseQueryStr {
 pub async fn api_get_course_info(
     Path(term): Path<String>,
     Query(crsc): Query<CourseQueryStr>,
-    State(s): State<WrapperState>,
+    State(s): State<Arc<WrapperState>>,
 ) -> Response {
     info!("Called with path {term} and query: {crsc}");
 
@@ -59,7 +60,7 @@ pub async fn api_get_course_info(
 pub async fn api_get_prereqs(
     Path(term): Path<String>,
     Query(crsc): Query<CourseQueryStr>,
-    State(s): State<WrapperState>,
+    State(s): State<Arc<WrapperState>>,
 ) -> Response {
     info!("Called with path {term} and query: {crsc}");
 
@@ -166,7 +167,7 @@ impl Display for CourseSearchJsonBody {
 #[axum_macros::debug_handler]
 pub async fn api_get_search_courses(
     Path(term): Path<String>,
-    State(s): State<WrapperState>,
+    State(s): State<Arc<WrapperState>>,
     // The Json needs to be the last parameter since its request body is being consumed.
     Json(search_info): Json<CourseSearchJsonBody>,
 ) -> Response {

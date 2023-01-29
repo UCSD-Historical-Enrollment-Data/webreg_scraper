@@ -4,14 +4,12 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
 use std::process::ExitCode;
-use std::sync::atomic::{AtomicBool, AtomicUsize};
+use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 use std::time::Duration;
 
 use webweg::reqwest::Client;
 
-#[cfg(feature = "scraper")]
-use std::sync::atomic::Ordering;
 #[cfg(feature = "api")]
 use {
     crate::api::status_api::{api_get_login_script_stats, api_get_term_status},
@@ -19,6 +17,8 @@ use {
     axum::routing::get,
     axum::Router,
 };
+#[cfg(feature = "scraper")]
+use {std::sync::atomic::Ordering, tracing::info};
 
 use crate::tracker::run_tracker;
 use crate::types::{ConfigScraper, WrapperMap, WrapperState};
@@ -40,7 +40,7 @@ pub const STARTUP_COOLDOWN: f64 = 1.5;
 #[tokio::main]
 async fn main() -> ExitCode {
     tracing_subscriber::fmt::init();
-    println!("WebRegScraper/API Version {}", VERSION);
+    println!("WebRegScraper/API Version {VERSION}");
     // First, get the configuration file.
     let config_path = match std::env::args().skip(1).last() {
         Some(s) => s,
@@ -63,10 +63,7 @@ async fn main() -> ExitCode {
     ) {
         Ok(config) => config,
         Err(err) => {
-            println!(
-                "[!] Bad config file. Please fix it and then try again.\n{}",
-                err
-            );
+            println!("[!] Bad config file. Please fix it and then try again.\n{err}");
             return ExitCode::FAILURE;
         }
     };
@@ -83,28 +80,19 @@ async fn main() -> ExitCode {
     }
 
     // These two variables will be used to determine whether the scraper needs to stop.
-    let main_num_stopped = Arc::new(AtomicUsize::new(0));
     let main_stop_flag = Arc::new(AtomicBool::new(false));
 
-    let state = WrapperState {
+    let state = Arc::new(WrapperState {
         all_wrappers: all_terms,
         stop_flag: main_stop_flag.clone(),
-        stop_ct: main_num_stopped.clone(),
         client: Arc::new(Client::new()),
-    };
+    });
 
     for (_, term_info) in state.all_wrappers.iter() {
         let this_term_info = term_info.clone();
         let this_stop_flag = state.stop_flag.clone();
-        let this_stop_ct = main_num_stopped.clone();
         tokio::spawn(async move {
-            run_tracker(
-                this_term_info,
-                this_stop_flag,
-                this_stop_ct,
-                config_info.verbose,
-            )
-            .await;
+            run_tracker(this_term_info, this_stop_flag, config_info.verbose).await;
         });
 
         tokio::time::sleep(Duration::from_secs_f64(STARTUP_COOLDOWN)).await;
@@ -121,7 +109,7 @@ async fn main() -> ExitCode {
                 "/scraper/login_script/:term/:stat_type",
                 get(api_get_login_script_stats),
             )
-            .with_state(state);
+            .with_state(state.clone());
 
         let server = axum::Server::bind(
             &format!(
@@ -141,11 +129,7 @@ async fn main() -> ExitCode {
         // in the buffers are written to the file.
         #[cfg(feature = "scraper")]
         server
-            .with_graceful_shutdown(shutdown_signal(
-                main_num_stopped.clone(),
-                main_stop_flag.clone(),
-                config_info.terms.len(),
-            ))
+            .with_graceful_shutdown(shutdown_signal(state.clone(), main_stop_flag.clone()))
             .await
             .unwrap();
 
@@ -169,12 +153,7 @@ async fn main() -> ExitCode {
     // the scraper feature.
     #[cfg(not(feature = "api"))]
     {
-        shutdown_signal(
-            main_num_stopped.clone(),
-            main_stop_flag.clone(),
-            config_info.terms.len(),
-        )
-        .await;
+        shutdown_signal(state.clone(), main_stop_flag.clone()).await;
     }
 
     ExitCode::SUCCESS
@@ -183,21 +162,25 @@ async fn main() -> ExitCode {
 /// Handles shutting down the server.
 ///
 /// # Parameters
-/// - `num_stopped`: The number of scrapers that have stopped.
+/// - `state`: The wrapper state, which is a reference to all valid scrapers and other relevant
+/// information.
 /// - `stop_flag`: The flag indicating whether the scrapers should stop.
-/// - `num_total`: The total number of terms.
 #[cfg(feature = "scraper")]
-async fn shutdown_signal(
-    num_stopped: Arc<AtomicUsize>,
-    stop_flag: Arc<AtomicBool>,
-    num_total: usize,
-) {
+async fn shutdown_signal(state: Arc<WrapperState>, stop_flag: Arc<AtomicBool>) {
     tokio::signal::ctrl_c()
         .await
         .expect("Expected shutdown signal handler.");
 
+    // Intercept ctrl_c event
+    info!("Invoked ctrl+c event, stopping scrapers");
     stop_flag.store(true, Ordering::SeqCst);
-    while num_stopped.load(Ordering::SeqCst) < num_total {
+    while state
+        .all_wrappers
+        .values()
+        .filter(|x| !x.is_running.load(Ordering::SeqCst))
+        .count()
+        < state.all_wrappers.len()
+    {
         tokio::time::sleep(Duration::from_secs(1)).await;
     }
 }

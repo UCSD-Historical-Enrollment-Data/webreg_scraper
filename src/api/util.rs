@@ -20,7 +20,7 @@ use crate::types::{TermInfo, WrapperState};
 /// # Returns
 /// The response.
 #[inline]
-pub async fn api_get_general<A, U>(term: &str, res: A, state: WrapperState) -> Response
+pub async fn api_get_general<A, U>(term: &str, res: A, state: Arc<WrapperState>) -> Response
 where
     A: FnOnce(Arc<TermInfo>) -> U,
     U: Future<Output = Response>,

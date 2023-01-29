@@ -1,4 +1,4 @@
-use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -48,12 +48,7 @@ const TIMEOUT: [u64; 10] = [
 ///
 /// # Parameters
 /// - `s`: The wrapper handler.
-pub async fn run_tracker(
-    wrapper_info: Arc<TermInfo>,
-    stop_flag: Arc<AtomicBool>,
-    stop_ct: Arc<AtomicUsize>,
-    verbose: bool,
-) {
+pub async fn run_tracker(wrapper_info: Arc<TermInfo>, stop_flag: Arc<AtomicBool>, verbose: bool) {
     if wrapper_info.apply_term {
         let _ = wrapper_info
             .scraper_wrapper
@@ -110,7 +105,7 @@ pub async fn run_tracker(
 
             // Get new cookies.
             let new_cookie_str = {
-                match webweg::reqwest::get(format!("http://{}/cookie", address)).await {
+                match webweg::reqwest::get(format!("http://{address}/cookie")).await {
                     Ok(t) => {
                         let txt = t.text().await.unwrap_or_default();
                         let json: Value = serde_json::from_str(&txt).unwrap_or_default();
@@ -170,7 +165,6 @@ pub async fn run_tracker(
     // This should only run if we're 100% done with this
     // wrapper. For example, either the wrapper could not
     // log back in or we forced it to stop.
-    stop_ct.fetch_add(1, Ordering::SeqCst);
     println!("[{}] [{}] Quitting.", wrapper_info.term, get_pretty_time());
 }
 
@@ -213,7 +207,7 @@ pub async fn track_webreg_enrollment(
             .append(true)
             .create(true)
             .open(&file_name)
-            .unwrap_or_else(|_| panic!("could not open or create '{}'", file_name));
+            .unwrap_or_else(|_| panic!("could not open or create '{file_name}'"));
 
         let mut w = BufWriter::new(f);
         if is_new {
