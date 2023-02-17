@@ -3,8 +3,8 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use serde_json::Value;
-use tokio::sync::Mutex;
-use webweg::wrapper::{SearchType, WebRegWrapper};
+use tokio::time::Instant;
+use webweg::wrapper::SearchType;
 
 #[cfg(feature = "scraper")]
 use {
@@ -20,6 +20,7 @@ use {
 use crate::types::TermInfo;
 use crate::util::get_pretty_time;
 
+const MAX_RECENT_REQUESTS: usize = 100;
 const CLEANED_CSV_HEADER: &str = "time,enrolled,available,waitlisted,total";
 
 #[cfg(debug_assertions)]
@@ -69,13 +70,7 @@ pub async fn run_tracker(wrapper_info: Arc<TermInfo>, stop_flag: Arc<AtomicBool>
     let mut first_passed = false;
     loop {
         wrapper_info.is_running.store(true, Ordering::SeqCst);
-        track_webreg_enrollment(
-            &wrapper_info.scraper_wrapper,
-            &wrapper_info,
-            &stop_flag,
-            verbose,
-        )
-        .await;
+        track_webreg_enrollment(&wrapper_info, &stop_flag, verbose).await;
         wrapper_info.is_running.store(false, Ordering::SeqCst);
 
         if stop_flag.load(Ordering::SeqCst) {
@@ -173,18 +168,13 @@ pub async fn run_tracker(wrapper_info: Arc<TermInfo>, stop_flag: Arc<AtomicBool>
 /// basic course information and store this in a CSV file for later processing.
 ///
 /// # Parameters
-/// - `wrapper`: The wrapper.
-/// - `setting`: The settings for this term.
-/// - `end_location`: The end location for the cleaned CSV files. Just the base location will
-///   suffice.
-pub async fn track_webreg_enrollment(
-    wrapper: &Mutex<WebRegWrapper>,
-    info: &TermInfo,
-    stop_flag: &Arc<AtomicBool>,
-    verbose: bool,
-) {
+/// - `info`: The term information.
+/// - `stop_flag`: The stop flag. This is essentially a global flag that indicates if the scraper
+/// should stop running.
+/// - `verbose`: Whether logging should be verbose.
+pub async fn track_webreg_enrollment(info: &TermInfo, stop_flag: &Arc<AtomicBool>, verbose: bool) {
     // If the wrapper doesn't have a valid cookie, then return.
-    if !wrapper.lock().await.is_valid().await {
+    if !info.scraper_wrapper.lock().await.is_valid().await {
         eprintln!(
             "[{}] [{}] Initial instance is not valid. Returning.",
             info.term,
@@ -227,7 +217,7 @@ pub async fn track_webreg_enrollment(
         writer.flush().unwrap();
         let results = {
             let mut r = vec![];
-            let w = wrapper.lock().await;
+            let w = info.scraper_wrapper.lock().await;
             for search_query in &info.search_query {
                 let mut temp = w
                     .search_courses(SearchType::Advanced(search_query))
@@ -279,11 +269,14 @@ pub async fn track_webreg_enrollment(
                 break 'main;
             }
 
-            let w = wrapper.lock().await;
-            let res = w
-                .get_enrollment_count(r.subj_code.trim(), r.course_code.trim())
-                .await;
-            drop(w);
+            // Start timing.
+            let start_time = Instant::now();
+
+            let res = {
+                let w = info.scraper_wrapper.lock().await;
+                w.get_enrollment_count(r.subj_code.trim(), r.course_code.trim())
+                    .await
+            };
 
             match res {
                 Err(e) => {
@@ -353,11 +346,28 @@ pub async fn track_webreg_enrollment(
                 }
             }
 
+            // Record time spent on request.
+            let end_time = start_time.elapsed();
+            info.tracker.num_requests.fetch_add(1, Ordering::SeqCst);
+            let time_spent = end_time.as_millis() as usize;
+            info.tracker
+                .total_time_spent
+                .fetch_add(time_spent, Ordering::SeqCst);
+
+            // Add the most recent request to the deque, removing the oldest if necessary.
+            let mut recent_requests = info.tracker.recent_requests.lock().await;
+            while recent_requests.len() >= MAX_RECENT_REQUESTS {
+                recent_requests.pop_front();
+            }
+
+            recent_requests.push_back(time_spent);
+
             // Sleep between requests so we don't get ourselves banned by webreg
             tokio::time::sleep(Duration::from_secs_f64(info.cooldown)).await;
         }
     }
 
+    // Out of loop, this should run only if we need to exit the scraper (e.g., need to log back in)
     #[cfg(feature = "scraper")]
     {
         if !writer.buffer().is_empty() {
