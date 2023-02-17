@@ -70,7 +70,7 @@ impl From<&ConfigTermDatum> for TermInfo {
                 recent_requests: Default::default(),
                 num_requests: Default::default(),
                 total_time_spent: Default::default(),
-            }
+            },
         };
 
         if cfg!(feature = "scraper") {

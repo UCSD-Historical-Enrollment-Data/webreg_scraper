@@ -12,7 +12,9 @@ use webweg::reqwest::Client;
 
 #[cfg(feature = "api")]
 use {
-    crate::api::status_api::{api_get_login_script_stats, api_get_term_status},
+    crate::api::status_api::{
+        api_get_login_script_stats, api_get_term_status, api_get_timing_stats,
+    },
     crate::api::webreg_api::{api_get_course_info, api_get_prereqs, api_get_search_courses},
     axum::routing::get,
     axum::Router,
@@ -109,6 +111,7 @@ async fn main() -> ExitCode {
                 "/scraper/login_script/:term/:stat_type",
                 get(api_get_login_script_stats),
             )
+            .route("/scraper/timing_stats/:term", get(api_get_timing_stats))
             .with_state(state.clone());
 
         let server = axum::Server::bind(

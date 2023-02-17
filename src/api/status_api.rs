@@ -37,6 +37,13 @@ pub async fn api_get_term_status(
     .await
 }
 
+/// An endpoint for checking the time stats for a specific term's scrapers.
+///
+/// # Usage
+/// The endpoint should be called like so:
+/// ```
+/// /<term>
+/// ```
 pub async fn api_get_timing_stats(
     Path(term): Path<String>,
     State(s): State<Arc<WrapperState>>,
