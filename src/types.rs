@@ -1,5 +1,5 @@
-use std::collections::HashMap;
-use std::sync::atomic::AtomicBool;
+use std::collections::{HashMap, VecDeque};
+use std::sync::atomic::{AtomicBool, AtomicUsize};
 use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
@@ -8,7 +8,6 @@ use webweg::reqwest::Client;
 use webweg::wrapper::{CourseLevelFilter, SearchRequestBuilder, WebRegWrapper};
 
 /// A structure that represents the current state of all wrappers.
-#[derive(Clone)]
 pub struct WrapperState {
     /// A map containing all active scrapers, grouped by term.
     pub all_wrappers: WrapperMap,
@@ -19,6 +18,16 @@ pub struct WrapperState {
 }
 
 pub type WrapperMap = HashMap<String, Arc<TermInfo>>;
+
+/// A structure that holds basic stats about the tracker.
+pub struct StatTracker {
+    /// The amount of time it took for the 100 most requests to finish processing.
+    pub recent_requests: Mutex<VecDeque<usize>>,
+    /// The number of requests that have been made thus far.
+    pub num_requests: AtomicUsize,
+    /// The total amount of time spent making those requests, in milliseconds.
+    pub total_time_spent: AtomicUsize,
+}
 
 /// A structure that holds information relating to the scraper and, more importantly, the
 /// scraper instances themselves.
@@ -41,6 +50,8 @@ pub struct TermInfo {
     pub general_wrapper: Mutex<WebRegWrapper>,
     /// Whether the scrapers are running.
     pub is_running: AtomicBool,
+    /// Tracker stats. This field contains information on the performance of the scrapers.
+    pub tracker: StatTracker,
 }
 
 impl From<&ConfigTermDatum> for TermInfo {
@@ -55,6 +66,11 @@ impl From<&ConfigTermDatum> for TermInfo {
             scraper_wrapper: Mutex::new(WebRegWrapper::new(Client::new(), "", value.term.as_str())),
             general_wrapper: Mutex::new(WebRegWrapper::new(Client::new(), "", value.term.as_str())),
             is_running: AtomicBool::new(false),
+            tracker: StatTracker {
+                recent_requests: Default::default(),
+                num_requests: Default::default(),
+                total_time_spent: Default::default(),
+            },
         };
 
         if cfg!(feature = "scraper") {

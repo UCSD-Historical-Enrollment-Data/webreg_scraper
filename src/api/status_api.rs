@@ -37,6 +37,52 @@ pub async fn api_get_term_status(
     .await
 }
 
+/// An endpoint for checking the time stats for a specific term's scrapers.
+///
+/// # Usage
+/// The endpoint should be called like so:
+/// ```
+/// /<term>
+/// ```
+pub async fn api_get_timing_stats(
+    Path(term): Path<String>,
+    State(s): State<Arc<WrapperState>>,
+) -> Response {
+    info!("Called with path {term}.");
+
+    api_get_general(
+        term.as_str(),
+        move |term_info| async move {
+            let num_requests = term_info.tracker.num_requests.load(Ordering::SeqCst);
+            let time_spent = term_info.tracker.total_time_spent.load(Ordering::SeqCst);
+            let recent_requests = format!(
+                "[{}]",
+                term_info
+                    .tracker
+                    .recent_requests
+                    .lock()
+                    .await
+                    .iter()
+                    .map(|amt| amt.to_string())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            );
+
+            (
+                StatusCode::OK,
+                Json(json!({
+                    "ttl_requests": num_requests,
+                    "ttl_time_ms": time_spent,
+                    "recent_requests": recent_requests
+                })),
+            )
+                .into_response()
+        },
+        s,
+    )
+    .await
+}
+
 /// An endpoint for checking the status of a specific term's scrapers.
 ///
 /// # Usage
