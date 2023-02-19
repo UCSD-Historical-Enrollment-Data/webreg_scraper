@@ -20,7 +20,7 @@ use {
 use crate::types::TermInfo;
 use crate::util::get_pretty_time;
 
-const MAX_RECENT_REQUESTS: usize = 100;
+const MAX_RECENT_REQUESTS: usize = 2000;
 const CLEANED_CSV_HEADER: &str = "time,enrolled,available,waitlisted,total";
 
 #[cfg(debug_assertions)]
@@ -354,13 +354,19 @@ pub async fn track_webreg_enrollment(info: &TermInfo, stop_flag: &Arc<AtomicBool
                 .total_time_spent
                 .fetch_add(time_spent, Ordering::SeqCst);
 
-            // Add the most recent request to the deque, removing the oldest if necessary.
-            let mut recent_requests = info.tracker.recent_requests.lock().await;
-            while recent_requests.len() >= MAX_RECENT_REQUESTS {
-                recent_requests.pop_front();
-            }
+            // Put this part of the code in its own scope so that
+            // we unlock the mutex as soon as we're done with it.
+            // Otherwise, we'd have to wait until the sleep call
+            // is done before the mutex is unlocked.
+            {
+                // Add the most recent request to the deque, removing the oldest if necessary.
+                let mut recent_requests = info.tracker.recent_requests.lock().await;
+                while recent_requests.len() >= MAX_RECENT_REQUESTS {
+                    recent_requests.pop_front();
+                }
 
-            recent_requests.push_back(time_spent);
+                recent_requests.push_back(time_spent);
+            }
 
             // Sleep between requests so we don't get ourselves banned by webreg
             tokio::time::sleep(Duration::from_secs_f64(info.cooldown)).await;

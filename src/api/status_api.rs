@@ -57,7 +57,7 @@ pub async fn api_get_timing_stats(
             let time_spent = term_info.tracker.total_time_spent.load(Ordering::SeqCst);
             let recent_requests = {
                 let temp = term_info.tracker.recent_requests.lock().await;
-                temp.iter().map(|x| *x).collect::<Vec<_>>()
+                temp.iter().copied().collect::<Vec<_>>()
             };
 
             (
