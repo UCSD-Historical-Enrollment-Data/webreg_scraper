@@ -55,18 +55,10 @@ pub async fn api_get_timing_stats(
         move |term_info| async move {
             let num_requests = term_info.tracker.num_requests.load(Ordering::SeqCst);
             let time_spent = term_info.tracker.total_time_spent.load(Ordering::SeqCst);
-            let recent_requests = format!(
-                "[{}]",
-                term_info
-                    .tracker
-                    .recent_requests
-                    .lock()
-                    .await
-                    .iter()
-                    .map(|amt| amt.to_string())
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            );
+            let recent_requests = {
+                let temp = term_info.tracker.recent_requests.lock().await;
+                temp.iter().copied().collect::<Vec<_>>()
+            };
 
             (
                 StatusCode::OK,
