@@ -140,13 +140,15 @@ The following configuration file (also found in `config.example.json`) defines t
 ## Setup
 Below are instructions on how you can build and run this project. This setup guide assumes the use of Ubuntu for the host operating system, although other Linux distributions should be relatively similar.
 
-First, please install [Rust](https://www.rust-lang.org/) and [Node.js](https://nodejs.org/en/); the latest versions will
-suffice.
+First, please install the latest version of:
+- [Node.js](https://nodejs.org/en/)
+- [Rust](https://www.rust-lang.org/)
+  - if you want to compile the project yourself; if you just want the executables, they are provided in the Releases section. More on this below.
 
 ### Part 1: `webregautoin`
 As mentioned above, `webregautoin` is the script that allows the scraper to actually log into WebReg.
-1. A sample configuration file has been provided for you; this file is called `config.example.json`. 
-   1. Rename this file to `config.json`. 
+1. A sample configuration file has been provided for you; this file is called [`credentials.example.json`](https://github.com/ewang2002/webreg_scraper/blob/master/webregautoin/credentials.sample.json). 
+   1. Rename this file to `credentials.json`. 
    2. Open the file and fill in your UC San Diego Active Directory username and password. 
    3. Save your changes. 
 
@@ -203,6 +205,24 @@ There are a few things to keep in mind:
 - You must redo this process once every 6-7 days, since Duo only remembers you for up to 7 days. 
 
 ### Part 2: The Scraper
+
+Please follow the directions based on what you want. 
+
+<details>
+<summary>Just Want Executable.</summary>
+<br> 
+
+If you just want the executable, download the [relevant executable here](https://github.com/ewang2002/webreg_scraper/releases). The executables are in a zipped file, so you'll need to unzip it. The naming scheme of the file is `webreg_scraper-x86_64-[operating system]-[features].[extension]`, where you can find the [features here](#features). If you want all features, then download the archive with `all` in its name. 
+
+After you get the relevant executable, please finish step 3 and the later part of step 5 under "Self-Compiling." 
+
+</details>
+
+
+<details>
+<summary>Self-Compiling.</summary>
+<br> 
+
 1. Install the required system dependencies:
     ```
     sudo apt-get update
@@ -212,7 +232,13 @@ There are a few things to keep in mind:
     ```
 
 2. Download the contents of this repository. You can either download it directly, or use something like `git clone`.
-3. Now, you'll have the opportunity to compile the project, thus getting your program. Depending on what you want,
+
+3. A sample configuration file has been provided for you; this file is called [`config.example.json`](https://github.com/ewang2002/webreg_scraper/blob/master/config.example.json). 
+   1. Rename this file to `config.json`. 
+   2. Modify the configuration information appropriately. Information on the structure of the configuration file can be found [above](#scraper-configuration-file).
+   3. Save your changes. 
+
+4. Now, you'll have the opportunity to compile the project, thus getting your program. Depending on what you want,
    you'll run one of the commands below:
     - If you want both the API and scraper functionality, you can just run the following command:
       ```
@@ -227,12 +253,14 @@ There are a few things to keep in mind:
       cargo build --no-default-features --features scraper --release
       ```
 
-4. You should find the executable in the `/target/release` directory. Run the executable using the following command:
+5. You should find the executable in the `/target/release` directory. Run the executable using the following command:
    ```
    ./webreg_scraper path_to_config_file
    ```
    where `path_to_config_file` should be replaced with the configuration file's name (full path). You may need to run
    `chmod u+x webreg_scraper` first so you can execute the program!
+
+</details>
 
 ## Implementation
 I'll only focus on the program's main feature -- tracking enrollment counts.
