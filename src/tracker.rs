@@ -229,7 +229,7 @@ pub async fn track_webreg_enrollment(info: &TermInfo, stop_flag: &Arc<AtomicBool
                 .await
                 .ok()
                 .and_then(|r| r.ok())
-                .unwrap_or_else(Vec::new);
+                .unwrap_or_default();
 
                 r.append(&mut temp);
                 tokio::time::sleep(Duration::from_secs(1)).await;
