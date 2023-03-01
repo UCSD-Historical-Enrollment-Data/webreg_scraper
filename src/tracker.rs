@@ -3,7 +3,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use serde_json::Value;
-use tokio::time::Instant;
+use tokio::time::{timeout, Instant};
 use webweg::wrapper::SearchType;
 
 #[cfg(feature = "scraper")]
@@ -23,13 +23,16 @@ use crate::util::get_pretty_time;
 const MAX_RECENT_REQUESTS: usize = 2000;
 const CLEANED_CSV_HEADER: &str = "time,enrolled,available,waitlisted,total";
 
+// How long the scraper should wait for a request to finish before terminating it.
+const DURATION_TIMEOUT: u64 = 15;
+
 #[cfg(debug_assertions)]
-const TIMEOUT: [u64; 10] = [5, 8, 16, 32, 64, 128, 256, 512, 1024, 2048];
+const LOGIN_DELAY: [u64; 10] = [5, 8, 16, 32, 64, 128, 256, 512, 1024, 2048];
 
 // The idea is that it should take no more than 15 minutes for
 // WebReg to be available.
 #[cfg(not(debug_assertions))]
-const TIMEOUT: [u64; 10] = [
+const LOGIN_DELAY: [u64; 10] = [
     // Theoretically, WebReg should be down for no longer than 20 minutes...
     8 * 60,
     6 * 60,
@@ -85,7 +88,7 @@ pub async fn run_tracker(wrapper_info: Arc<TermInfo>, stop_flag: Arc<AtomicBool>
 
         // Basically, keep on trying until we get back into WebReg.
         let mut success = false;
-        for time in TIMEOUT {
+        for time in LOGIN_DELAY {
             if first_passed {
                 println!(
                     "[{}] [{}] Taking a {} second break.",
@@ -219,10 +222,14 @@ pub async fn track_webreg_enrollment(info: &TermInfo, stop_flag: &Arc<AtomicBool
             let mut r = vec![];
             let w = info.scraper_wrapper.lock().await;
             for search_query in &info.search_query {
-                let mut temp = w
-                    .search_courses(SearchType::Advanced(search_query))
-                    .await
-                    .unwrap_or_default();
+                let mut temp = timeout(
+                    Duration::from_secs(DURATION_TIMEOUT),
+                    w.search_courses(SearchType::Advanced(search_query)),
+                )
+                .await
+                .ok()
+                .and_then(|r| r.ok())
+                .unwrap_or_else(|| vec![]);
 
                 r.append(&mut temp);
                 tokio::time::sleep(Duration::from_secs(1)).await;
@@ -274,15 +281,28 @@ pub async fn track_webreg_enrollment(info: &TermInfo, stop_flag: &Arc<AtomicBool
 
             let res = {
                 let w = info.scraper_wrapper.lock().await;
-                w.get_enrollment_count(r.subj_code.trim(), r.course_code.trim())
-                    .await
+                timeout(
+                    Duration::from_secs(DURATION_TIMEOUT),
+                    w.get_enrollment_count(r.subj_code.trim(), r.course_code.trim()),
+                )
+                .await
             };
 
             match res {
                 Err(e) => {
                     fail_count += 1;
                     eprintln!(
-                        "[{}] [{}] An error occurred ({}). Skipping. (FAIL_COUNT: {})",
+                        "[{}] [{}] A timeout error occurred ({}). Skipping. (FAIL_COUNT: {})",
+                        info.term,
+                        get_pretty_time(),
+                        e,
+                        fail_count
+                    );
+                }
+                Ok(Err(e)) => {
+                    fail_count += 1;
+                    eprintln!(
+                        "[{}] [{}] An API error occurred ({}). Skipping. (FAIL_COUNT: {})",
                         info.term,
                         get_pretty_time(),
                         e,
@@ -290,7 +310,7 @@ pub async fn track_webreg_enrollment(info: &TermInfo, stop_flag: &Arc<AtomicBool
                     );
                 }
                 #[cfg(not(feature = "scraper"))]
-                Ok(r) if !r.is_empty() => {
+                Ok(Ok(r)) if !r.is_empty() => {
                     fail_count = 0;
                     if verbose {
                         println!(
@@ -301,7 +321,7 @@ pub async fn track_webreg_enrollment(info: &TermInfo, stop_flag: &Arc<AtomicBool
                     }
                 }
                 #[cfg(feature = "scraper")]
-                Ok(r) if !r.is_empty() => {
+                Ok(Ok(r)) if !r.is_empty() => {
                     fail_count = 0;
                     if verbose {
                         println!(

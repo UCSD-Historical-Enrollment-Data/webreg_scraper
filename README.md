@@ -8,7 +8,9 @@
   <a href="https://github.com/ewang2002/UCSDHistEnrollData">UCSDHistEnrollmentData</a>
 </p>
 
-A program designed to both scrape WebReg for enrollment data as well as make WebReg data available to other applications.
+A program designed to both scrape WebReg for enrollment data and make WebReg data available to other applications.
+
+**NOTE:** If you just want a list of all offered courses, including all meeting information, in an active term, use the [utility program](https://github.com/ewang2002/Utilities/tree/master/wgtools) instead. This scraper only handles the number of students enrolled in a course.
 
 # Table of contents
 
