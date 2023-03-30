@@ -20,11 +20,14 @@ use {
 use crate::types::TermInfo;
 use crate::util::get_pretty_time;
 
+/// The number of requests that we want to store request duration information for.
 const MAX_RECENT_REQUESTS: usize = 2000;
+
+/// The CSV header.
 const CLEANED_CSV_HEADER: &str = "time,enrolled,available,waitlisted,total";
 
-// How long the scraper should wait for a request to finish before terminating it.
-const DURATION_TIMEOUT: u64 = 15;
+/// How long the scraper should wait for a request to finish before terminating it.
+pub const DURATION_TIMEOUT: u64 = 10;
 
 #[cfg(debug_assertions)]
 const LOGIN_DELAY: [u64; 10] = [5, 8, 16, 32, 64, 128, 256, 512, 1024, 2048];
@@ -51,7 +54,9 @@ const LOGIN_DELAY: [u64; 10] = [
 /// WebReg when signed out.
 ///
 /// # Parameters
-/// - `s`: The wrapper handler.
+/// - `wrapper_info`: The wrapper itself, along with information relating to the wrapper.
+/// - `stop_flag`: The flag indicating whether the scraper should stop collecting data.
+/// - `verbose`: Whether to verbosely log information.
 pub async fn run_tracker(wrapper_info: Arc<TermInfo>, stop_flag: Arc<AtomicBool>, verbose: bool) {
     if wrapper_info.apply_term {
         let _ = wrapper_info
@@ -240,7 +245,7 @@ pub async fn track_webreg_enrollment(info: &TermInfo, stop_flag: &Arc<AtomicBool
 
         if results.is_empty() {
             eprintln!(
-                "[{}] [{}] No courses found. Exiting.",
+                "[{}] [{}] No courses found, or course search timed out. Exiting.",
                 info.term,
                 get_pretty_time()
             );
@@ -282,7 +287,8 @@ pub async fn track_webreg_enrollment(info: &TermInfo, stop_flag: &Arc<AtomicBool
             let res = {
                 let w = info.scraper_wrapper.lock().await;
                 timeout(
-                    Duration::from_secs(DURATION_TIMEOUT),
+                    //Duration::from_secs(DURATION_TIMEOUT),
+                    Duration::from_millis(35),
                     w.get_enrollment_count(r.subj_code.trim(), r.course_code.trim()),
                 )
                 .await

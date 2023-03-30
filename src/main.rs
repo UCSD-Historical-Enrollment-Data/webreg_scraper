@@ -159,6 +159,7 @@ async fn main() -> ExitCode {
         shutdown_signal(state.clone(), main_stop_flag.clone()).await;
     }
 
+    println!("Exiting.");
     ExitCode::SUCCESS
 }
 
@@ -175,8 +176,9 @@ async fn shutdown_signal(state: Arc<WrapperState>, stop_flag: Arc<AtomicBool>) {
         .expect("Expected shutdown signal handler.");
 
     // Intercept ctrl_c event
-    info!("Invoked ctrl+c event, stopping scrapers");
+    info!("Invoked ctrl+c event, attempting to stop scrapers.");
     stop_flag.store(true, Ordering::SeqCst);
+
     while state
         .all_wrappers
         .values()
@@ -186,4 +188,6 @@ async fn shutdown_signal(state: Arc<WrapperState>, stop_flag: Arc<AtomicBool>) {
     {
         tokio::time::sleep(Duration::from_secs(1)).await;
     }
+
+    println!("\tScrapers stopped successfully.");
 }

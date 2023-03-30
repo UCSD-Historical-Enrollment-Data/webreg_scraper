@@ -6,6 +6,7 @@ use axum::response::{IntoResponse, Response};
 use axum::Json;
 use serde::Serialize;
 use serde_json::json;
+use tokio::time::error::Elapsed;
 use webweg::wrapper::WrapperError;
 
 use crate::types::{TermInfo, WrapperState};
@@ -46,18 +47,27 @@ where
 ///
 /// # Returns
 /// The response.
-pub fn process_return<T>(res: Result<T, WrapperError>) -> Response
+pub fn process_return<T>(res: Result<Result<T, WrapperError>, Elapsed>) -> Response
 where
     T: Serialize,
 {
     match res {
-        Ok(data) => (StatusCode::OK, Json(data)).into_response(),
-        Err(err) => (
-            StatusCode::BAD_REQUEST,
+        Err(_) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
             Json(json!({
-                "error": err.to_string()
+                "type": "timeout",
+                "error": "the request took too long and was canceled"
             })),
         )
             .into_response(),
+        Ok(Err(webweg_err)) => (
+            StatusCode::BAD_REQUEST,
+            Json(json!({
+                "type": "webweg",
+                "error": webweg_err.to_string()
+            })),
+        )
+            .into_response(),
+        Ok(Ok(data)) => (StatusCode::OK, Json(data)).into_response(),
     }
 }

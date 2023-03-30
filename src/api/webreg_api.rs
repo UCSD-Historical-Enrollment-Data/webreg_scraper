@@ -2,15 +2,18 @@
 
 use std::fmt::{Display, Formatter};
 use std::sync::Arc;
+use std::time::Duration;
 
 use axum::extract::{Path, Query, State};
 use axum::response::Response;
 use axum::Json;
 use serde::Deserialize;
+use tokio::time::timeout;
 use tracing::info;
 use webweg::wrapper::{CourseLevelFilter, DayOfWeek, SearchRequestBuilder, SearchType};
 
 use crate::api::util::{api_get_general, process_return};
+use crate::tracker::DURATION_TIMEOUT;
 use crate::types::WrapperState;
 
 #[derive(Deserialize)]
@@ -43,7 +46,13 @@ pub async fn api_get_course_info(
         term.as_str(),
         move |term_info| async move {
             let guard = term_info.general_wrapper.lock().await;
-            process_return(guard.get_course_info(&crsc.subject, &crsc.number).await)
+            process_return(
+                timeout(
+                    Duration::from_secs(DURATION_TIMEOUT),
+                    guard.get_course_info(&crsc.subject, &crsc.number),
+                )
+                .await,
+            )
         },
         s,
     )
@@ -68,7 +77,13 @@ pub async fn api_get_prereqs(
         term.as_str(),
         move |term_info| async move {
             let guard = term_info.general_wrapper.lock().await;
-            process_return(guard.get_prereqs(&crsc.subject, &crsc.number).await)
+            process_return(
+                timeout(
+                    Duration::from_secs(DURATION_TIMEOUT),
+                    guard.get_prereqs(&crsc.subject, &crsc.number),
+                )
+                .await,
+            )
         },
         s,
     )
@@ -268,9 +283,11 @@ pub async fn api_get_search_courses(
 
             let guard = term_info.general_wrapper.lock().await;
             process_return(
-                guard
-                    .search_courses(SearchType::Advanced(&query_builder))
-                    .await,
+                timeout(
+                    Duration::from_secs(DURATION_TIMEOUT),
+                    guard.search_courses(SearchType::Advanced(&query_builder)),
+                )
+                .await,
             )
         },
         s,
