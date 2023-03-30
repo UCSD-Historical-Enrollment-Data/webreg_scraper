@@ -287,8 +287,7 @@ pub async fn track_webreg_enrollment(info: &TermInfo, stop_flag: &Arc<AtomicBool
             let res = {
                 let w = info.scraper_wrapper.lock().await;
                 timeout(
-                    //Duration::from_secs(DURATION_TIMEOUT),
-                    Duration::from_millis(35),
+                    Duration::from_secs(DURATION_TIMEOUT),
                     w.get_enrollment_count(r.subj_code.trim(), r.course_code.trim()),
                 )
                 .await
