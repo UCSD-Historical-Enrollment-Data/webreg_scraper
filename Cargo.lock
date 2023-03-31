@@ -1353,9 +1353,9 @@ dependencies = [
 
 [[package]]
 name = "webweg"
-version = "0.7.2"
+version = "0.7.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "72705f8fe955fde189796b69a34ced1575070bb3a8de0ce40f87394be8a48d0d"
+checksum = "ee9d74b38af68ab46f39473d80a96978bbc7c3037888a87ec20694a5e94a5c20"
 dependencies = [
  "reqwest",
  "serde",
