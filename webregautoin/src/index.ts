@@ -98,11 +98,23 @@ function waitFor(ms: number): Promise<void> {
 }
 
 /**
- * Gets new WebReg cookies.
- * @returns The cookies.
+ * Gets new WebReg session cookies. This assumes that
+ * - your WebReg credentials are correct, and
+ * - Duo Push is automatically activated upon reaching the Duo 2FA page.
+ * 
+ * Note that calling this function does take some time to finish, upwards of 30
+ * seconds in some cases. 
+ * 
+ * @returns One of
+ * - your cookie string, if available.
+ * - an empty string, if an issue occurred when attempting to either authenticate
+ * with Duo 2FA (e.g., could not load the 2FA page) or when trying to access WebReg
+ * in general.
+ * - `"ERROR UNABLE TO AUTHENTICATE."`, if the script is unable to log into WebReg
+ * after a certain number of tries.
  */
 async function getCookies(): Promise<string> {
-    log(`GetCookies function called.`)
+    log("GetCookies function called.")
     if (!BROWSER) {
         log("Launching browser for first-time setup.");
         BROWSER = await puppeteer.launch({
@@ -125,6 +137,13 @@ async function getCookies(): Promise<string> {
         try {
             log("Opened new page. Attempting to connect to WebReg site.")
             const resp = await page.goto(WEBREG_URL);
+            // If we somehow cannot reach the page, try again. 
+            if (!resp) {
+                numFailedAttempts++;
+                log(`Unable to open page. Retrying (${numFailedAttempts}/${NUM_ATTEMPTS_BEFORE_EXIT}).`);
+                continue;
+            }
+
             log(`Reached ${resp.url()} with status code ${resp.status()}.`);
             if (resp.status() < 200 || resp.status() >= 300) {
                 throw new Error("Non-OK Status Code Returned.");
@@ -132,7 +151,7 @@ async function getCookies(): Promise<string> {
         }
         catch (e) {
             // Timed out probably, or failed to get page for some reason.
-            log(`An error occurred when trying to reach WebReg. See error stack trace below.`);
+            log("An error occurred when trying to reach WebReg. See error stack trace below.");
             console.info(e);
             console.info();
             return "";
@@ -224,8 +243,6 @@ async function getCookies(): Promise<string> {
                 return "ERROR UNABLE TO AUTHENTICATE.";
             }
 
-            // Not sure why we have this here
-            // loggedIn = true;
             numFailedAttempts++;
             log(`Unable to find a 'Go' button or Duo 2FA frame. Retrying (${numFailedAttempts}/${NUM_ATTEMPTS_BEFORE_EXIT}).`);
             continue;
