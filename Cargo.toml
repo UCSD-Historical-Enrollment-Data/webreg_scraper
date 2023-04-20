@@ -1,6 +1,6 @@
 [package]
 name = "webreg_scraper"
-version = "0.4.5"
+version = "0.4.6"
 authors = ["Edward Wang"]
 edition = "2021"
 description = "A scraper and/or API for UC San Diego's WebReg enrollment system."
