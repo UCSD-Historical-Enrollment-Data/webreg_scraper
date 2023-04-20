@@ -29,7 +29,7 @@ const LOGIN_TIMEOUT: [u64; 10] = [5, 8, 16, 32, 64, 128, 256, 512, 1024, 2048];
 // The idea is that it should take no more than 15 minutes for
 // WebReg to be available.
 #[cfg(not(debug_assertions))]
-const TIMEOUT: [u64; 10] = [
+const LOGIN_TIMEOUT: [u64; 10] = [
     // Theoretically, WebReg should be down for no longer than 20 minutes...
     8 * 60,
     6 * 60,
