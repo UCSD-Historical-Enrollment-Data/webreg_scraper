@@ -24,7 +24,7 @@ const MAX_RECENT_REQUESTS: usize = 2000;
 const CLEANED_CSV_HEADER: &str = "time,enrolled,available,waitlisted,total";
 
 #[cfg(debug_assertions)]
-const TIMEOUT: [u64; 10] = [5, 8, 16, 32, 64, 128, 256, 512, 1024, 2048];
+const LOGIN_TIMEOUT: [u64; 10] = [5, 8, 16, 32, 64, 128, 256, 512, 1024, 2048];
 
 // The idea is that it should take no more than 15 minutes for
 // WebReg to be available.
@@ -85,7 +85,7 @@ pub async fn run_tracker(wrapper_info: Arc<TermInfo>, stop_flag: Arc<AtomicBool>
 
         // Basically, keep on trying until we get back into WebReg.
         let mut success = false;
-        for time in TIMEOUT {
+        for time in LOGIN_TIMEOUT {
             if first_passed {
                 println!(
                     "[{}] [{}] Taking a {} second break.",

@@ -1,11 +1,15 @@
 use std::collections::{HashMap, VecDeque};
 use std::sync::atomic::{AtomicBool, AtomicUsize};
 use std::sync::Arc;
+use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
 use tokio::sync::Mutex;
-use webweg::reqwest::Client;
+use webweg::reqwest::{Client, ClientBuilder};
 use webweg::wrapper::{CourseLevelFilter, SearchRequestBuilder, WebRegWrapper};
+
+/// The request timeout, in seconds.
+const REQUEST_TIMEOUT: u64 = 25;
 
 /// A structure that represents the current state of all wrappers.
 pub struct WrapperState {
@@ -63,8 +67,22 @@ impl From<&ConfigTermDatum> for TermInfo {
             cooldown: value.cooldown,
             search_query: vec![],
             apply_term: value.apply_before_use,
-            scraper_wrapper: Mutex::new(WebRegWrapper::new(Client::new(), "", value.term.as_str())),
-            general_wrapper: Mutex::new(WebRegWrapper::new(Client::new(), "", value.term.as_str())),
+            scraper_wrapper: Mutex::new(WebRegWrapper::new(
+                ClientBuilder::new()
+                    .timeout(Duration::from_secs(REQUEST_TIMEOUT))
+                    .build()
+                    .unwrap(),
+                "",
+                value.term.as_str(),
+            )),
+            general_wrapper: Mutex::new(WebRegWrapper::new(
+                ClientBuilder::new()
+                    .timeout(Duration::from_secs(REQUEST_TIMEOUT))
+                    .build()
+                    .unwrap(),
+                "",
+                value.term.as_str(),
+            )),
             is_running: AtomicBool::new(false),
             tracker: StatTracker {
                 recent_requests: Default::default(),
