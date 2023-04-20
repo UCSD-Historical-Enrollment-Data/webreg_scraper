@@ -18,8 +18,9 @@ const DEBUG_MODE: boolean = false;
 // <option value="THIS">Some Quarter</option>
 //                ----
 const ALL_TERMS: readonly string[] = [
-    "5260:::WI23",
-    "5270:::SP23"
+    "5270:::SP23",
+    "5280:::S123",
+    "5290:::S223"
 ];
 
 const NUM_ATTEMPTS_BEFORE_EXIT: number = 6;
