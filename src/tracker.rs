@@ -4,6 +4,7 @@ use std::time::Duration;
 
 use serde_json::Value;
 use tokio::time::Instant;
+use tracing::{error, info};
 use webweg::wrapper::input_types::{SearchRequestBuilder, SearchType};
 use webweg::wrapper::WebRegWrapper;
 
@@ -15,7 +16,6 @@ use {
 };
 
 use crate::types::{TermInfo, WrapperState};
-use crate::util::get_pretty_time;
 
 const TIME_BETWEEN_WAIT_SEC: u64 = 3;
 const MAX_NUM_REGISTER: usize = 25;
@@ -51,7 +51,7 @@ pub async fn run_tracker(state: Arc<WrapperState>, wrapper_info: Arc<TermInfo>, 
     // This should only run if we're 100% done with this
     // wrapper. For example, either the wrapper could not
     // log back in or we forced it to stop.
-    println!("[{}] [{}] Quitting.", wrapper_info.term, get_pretty_time());
+    info!("[{}] Quitting.", wrapper_info.term);
 }
 
 /// Tracks WebReg for enrollment information. This will continuously check specific courses for
@@ -112,18 +112,13 @@ pub async fn track_webreg_enrollment(state: &Arc<WrapperState>, info: &TermInfo,
         };
 
         if results.is_empty() {
-            eprintln!(
-                "[{}] [{}] No courses found. Exiting.",
-                info.term,
-                get_pretty_time()
-            );
+            error!("[{}] No courses found. Exiting.", info.term);
             break;
         }
 
-        println!(
-            "[{}] [{}] Found {} results successfully.",
+        info!(
+            "[{}] Found {} results successfully.",
             info.term,
-            get_pretty_time(),
             results.len()
         );
 
@@ -133,10 +128,9 @@ pub async fn track_webreg_enrollment(state: &Arc<WrapperState>, info: &TermInfo,
             }
 
             if fail_count != 0 && fail_count > 12 {
-                eprintln!(
-                    "[{}] [{}] Too many failures when trying to request data from WebReg.",
-                    info.term,
-                    get_pretty_time()
+                error!(
+                    "[{}] Too many failures when trying to request data from WebReg.",
+                    info.term
                 );
                 break 'main;
             }
@@ -154,21 +148,17 @@ pub async fn track_webreg_enrollment(state: &Arc<WrapperState>, info: &TermInfo,
             match res {
                 Err(e) => {
                     fail_count += 1;
-                    eprintln!(
-                        "[{}] [{}] An error occurred ({}). Skipping. (FAIL_COUNT: {})",
-                        info.term,
-                        get_pretty_time(),
-                        e,
-                        fail_count
+                    error!(
+                        "[{}] An error occurred ({}). Skipping. (FAIL_COUNT: {})",
+                        info.term, e, fail_count
                     );
                 }
                 Ok(r) if !r.is_empty() => {
                     fail_count = 0;
                     if verbose {
-                        println!(
-                            "[{}] [{}] Processing {} section(s) for {}",
+                        info!(
+                            "[{}] Processing {} section(s) for {}",
                             info.term,
-                            get_pretty_time(),
                             r.len(),
                             r[0].subj_course_id
                         );
@@ -196,10 +186,9 @@ pub async fn track_webreg_enrollment(state: &Arc<WrapperState>, info: &TermInfo,
                 }
                 _ => {
                     fail_count += 1;
-                    eprintln!(
-                        "[{}] [{}] Course {} {} not found. Were you logged out? (FAIL_COUNT: {}).",
+                    error!(
+                        "[{}] Course {} {} not found. Were you logged out? (FAIL_COUNT: {}).",
                         info.term,
-                        get_pretty_time(),
                         r.subj_code.trim(),
                         r.course_code.trim(),
                         fail_count
@@ -236,20 +225,18 @@ pub async fn track_webreg_enrollment(state: &Arc<WrapperState>, info: &TermInfo,
 
     // Out of loop, this should run only if we need to exit the scraper (e.g., need to log back in)
     if !writer.buffer().is_empty() {
-        println!(
-            "[{}] [{}] Buffer not empty! Buffer has length {}.",
+        info!(
+            "[{}] Buffer not empty! Buffer has length {}.",
             info.term,
-            get_pretty_time(),
             writer.buffer().len()
         );
     }
 
     writer.flush().unwrap();
     // Debugging possible issues with the buffer
-    println!(
-        "[{}] [{}] Buffer flushed. Final buffer length: {}.",
+    info!(
+        "[{}] Buffer flushed. Final buffer length: {}.",
         info.term,
-        get_pretty_time(),
         writer.buffer().len()
     );
 }
