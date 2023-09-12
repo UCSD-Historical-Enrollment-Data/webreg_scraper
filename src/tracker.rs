@@ -1,155 +1,46 @@
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use std::time::Duration;
 
 use serde_json::Value;
 use tokio::time::Instant;
-use webweg::wrapper::SearchType;
+use webweg::wrapper::input_types::{SearchRequestBuilder, SearchType};
+use webweg::wrapper::WebRegWrapper;
 
-#[cfg(feature = "scraper")]
 use {
     crate::util::get_epoch_time,
-    std::collections::HashMap,
-    std::fs::{File, OpenOptions},
+    std::fs::OpenOptions,
     std::io::{BufWriter, Write},
-    std::iter::Sum,
-    std::ops::{Add, AddAssign},
     std::path::Path,
 };
 
-use crate::types::TermInfo;
+use crate::types::{TermInfo, WrapperState};
 use crate::util::get_pretty_time;
 
+const TIME_BETWEEN_WAIT_SEC: u64 = 3;
+const MAX_NUM_REGISTER: usize = 25;
+const MAX_NUM_FAILURES: usize = 50;
 const MAX_RECENT_REQUESTS: usize = 2000;
-const CLEANED_CSV_HEADER: &str = "time,enrolled,available,waitlisted,total";
-
-#[cfg(debug_assertions)]
-const LOGIN_TIMEOUT: [u64; 10] = [5, 8, 16, 32, 64, 128, 256, 512, 1024, 2048];
-
-// The idea is that it should take no more than 15 minutes for
-// WebReg to be available.
-#[cfg(not(debug_assertions))]
-const LOGIN_TIMEOUT: [u64; 10] = [
-    // Theoretically, WebReg should be down for no longer than 20 minutes...
-    8 * 60,
-    6 * 60,
-    4 * 60,
-    2 * 60,
-    // But if WebReg is down for longer, then wait longer...
-    10 * 60,
-    15 * 60,
-    20 * 60,
-    30 * 60,
-    45 * 60,
-    60 * 60,
-];
 
 /// Runs the WebReg tracker. This will optionally attempt to reconnect to
 /// WebReg when signed out.
 ///
 /// # Parameters
-/// - `s`: The wrapper handler.
-pub async fn run_tracker(wrapper_info: Arc<TermInfo>, stop_flag: Arc<AtomicBool>, verbose: bool) {
-    if wrapper_info.apply_term {
-        let _ = wrapper_info
-            .scraper_wrapper
-            .lock()
-            .await
-            .use_term(wrapper_info.term.as_str())
-            .await;
-        let _ = wrapper_info
-            .general_wrapper
-            .lock()
-            .await
-            .use_term(wrapper_info.term.as_str())
-            .await;
-    }
-
-    // In case the given cookies were invalid, if this variable is false, we skip the
-    // initial delay and immediately try to fetch the cookies.
-    let mut first_passed = false;
+/// - `state`: The wrapper state.
+/// - `wrapper_info`: The wrapper information.
+/// - `verbose`: Whether the logging should be verbose.
+pub async fn run_tracker(state: Arc<WrapperState>, wrapper_info: Arc<TermInfo>, verbose: bool) {
+    try_login(&state).await;
     loop {
-        wrapper_info.is_running.store(true, Ordering::SeqCst);
-        track_webreg_enrollment(&wrapper_info, &stop_flag, verbose).await;
-        wrapper_info.is_running.store(false, Ordering::SeqCst);
+        state.is_running.store(true, Ordering::SeqCst);
+        track_webreg_enrollment(&state, &wrapper_info, verbose).await;
+        state.is_running.store(false, Ordering::SeqCst);
 
-        if stop_flag.load(Ordering::SeqCst) {
+        if state.should_stop() {
             break;
         }
 
-        // If we're here, this means something went wrong.
-        let address = format!(
-            "{}:{}",
-            wrapper_info.recovery.address, wrapper_info.recovery.port
-        );
-
-        // Basically, keep on trying until we get back into WebReg.
-        let mut success = false;
-        for time in LOGIN_TIMEOUT {
-            if first_passed {
-                println!(
-                    "[{}] [{}] Taking a {} second break.",
-                    wrapper_info.term,
-                    get_pretty_time(),
-                    time
-                );
-                tokio::time::sleep(Duration::from_secs(time)).await;
-            }
-
-            first_passed = true;
-
-            // Get new cookies.
-            let new_cookie_str = {
-                match webweg::reqwest::get(format!("http://{address}/cookie")).await {
-                    Ok(t) => {
-                        let txt = t.text().await.unwrap_or_default();
-                        let json: Value = serde_json::from_str(&txt).unwrap_or_default();
-                        if json["cookie"].is_string() {
-                            Some(json["cookie"].as_str().unwrap().to_string())
-                        } else {
-                            None
-                        }
-                    }
-                    Err(_) => None,
-                }
-            };
-
-            // And then try to make a new wrapper with said cookies.
-            if let Some(c) = new_cookie_str {
-                // Empty string = failed to get data.
-                // Try again.
-                if c.is_empty() {
-                    continue;
-                }
-
-                wrapper_info
-                    .scraper_wrapper
-                    .lock()
-                    .await
-                    .set_cookies(c.clone());
-                wrapper_info.general_wrapper.lock().await.set_cookies(c);
-
-                if wrapper_info.apply_term {
-                    let _ = wrapper_info
-                        .scraper_wrapper
-                        .lock()
-                        .await
-                        .use_term(&wrapper_info.term)
-                        .await;
-                    let _ = wrapper_info
-                        .general_wrapper
-                        .lock()
-                        .await
-                        .use_term(&wrapper_info.term)
-                        .await;
-                }
-                success = true;
-                break;
-            }
-        }
-
-        // If successful, we can continue pinging WebReg.
-        if success {
+        if try_login(&state).await {
             continue;
         }
 
@@ -168,28 +59,15 @@ pub async fn run_tracker(wrapper_info: Arc<TermInfo>, stop_flag: Arc<AtomicBool>
 /// basic course information and store this in a CSV file for later processing.
 ///
 /// # Parameters
+/// - `state`: The wrapper state.
 /// - `info`: The term information.
-/// - `stop_flag`: The stop flag. This is essentially a global flag that indicates if the scraper
-/// should stop running.
 /// - `verbose`: Whether logging should be verbose.
-pub async fn track_webreg_enrollment(info: &TermInfo, stop_flag: &Arc<AtomicBool>, verbose: bool) {
-    // If the wrapper doesn't have a valid cookie, then return.
-    if !info.scraper_wrapper.lock().await.is_valid().await {
-        eprintln!(
-            "[{}] [{}] Initial instance is not valid. Returning.",
-            info.term,
-            get_pretty_time()
-        );
-
-        return;
-    }
-
-    #[cfg(feature = "scraper")]
+pub async fn track_webreg_enrollment(state: &Arc<WrapperState>, info: &TermInfo, verbose: bool) {
     let mut writer = {
         let file_name = format!(
             "enrollment_{}_{}.csv",
             chrono::offset::Local::now().format("%FT%H_%M_%S"),
-            info.alias.as_ref().unwrap_or(&info.term)
+            info.term.as_str()
         );
         let is_new = !Path::new(&file_name).exists();
 
@@ -213,14 +91,16 @@ pub async fn track_webreg_enrollment(info: &TermInfo, stop_flag: &Arc<AtomicBool
 
     let mut fail_count = 0;
     'main: loop {
-        #[cfg(feature = "scraper")]
         writer.flush().unwrap();
         let results = {
             let mut r = vec![];
-            let w = info.scraper_wrapper.lock().await;
             for search_query in &info.search_query {
-                let mut temp = w
-                    .search_courses(SearchType::Advanced(search_query))
+                let mut temp = state
+                    .wrapper
+                    .req(info.term.as_str())
+                    .parsed()
+                    // TODO: Remove .clone usage here.
+                    .search_courses(SearchType::Advanced(search_query.clone()))
                     .await
                     .unwrap_or_default();
 
@@ -240,23 +120,15 @@ pub async fn track_webreg_enrollment(info: &TermInfo, stop_flag: &Arc<AtomicBool
             break;
         }
 
-        #[cfg(feature = "scraper")]
         println!(
             "[{}] [{}] Found {} results successfully.",
             info.term,
             get_pretty_time(),
             results.len()
         );
-        #[cfg(not(feature = "scraper"))]
-        println!(
-            "[{}] [{}] Search execution successful ({}).",
-            info.term,
-            get_pretty_time(),
-            results.len()
-        );
 
         for r in results {
-            if stop_flag.load(Ordering::SeqCst) {
+            if state.should_stop() {
                 break 'main;
             }
 
@@ -272,11 +144,12 @@ pub async fn track_webreg_enrollment(info: &TermInfo, stop_flag: &Arc<AtomicBool
             // Start timing.
             let start_time = Instant::now();
 
-            let res = {
-                let w = info.scraper_wrapper.lock().await;
-                w.get_enrollment_count(r.subj_code.trim(), r.course_code.trim())
-                    .await
-            };
+            let res = state
+                .wrapper
+                .req(info.term.as_str())
+                .parsed()
+                .get_enrollment_count(r.subj_code.trim(), r.course_code.trim())
+                .await;
 
             match res {
                 Err(e) => {
@@ -289,18 +162,6 @@ pub async fn track_webreg_enrollment(info: &TermInfo, stop_flag: &Arc<AtomicBool
                         fail_count
                     );
                 }
-                #[cfg(not(feature = "scraper"))]
-                Ok(r) if !r.is_empty() => {
-                    fail_count = 0;
-                    if verbose {
-                        println!(
-                            "[{}] [{}] Pinged successfully!",
-                            info.term,
-                            get_pretty_time(),
-                        );
-                    }
-                }
-                #[cfg(feature = "scraper")]
                 Ok(r) if !r.is_empty() => {
                     fail_count = 0;
                     if verbose {
@@ -374,70 +235,114 @@ pub async fn track_webreg_enrollment(info: &TermInfo, stop_flag: &Arc<AtomicBool
     }
 
     // Out of loop, this should run only if we need to exit the scraper (e.g., need to log back in)
-    #[cfg(feature = "scraper")]
-    {
-        if !writer.buffer().is_empty() {
-            println!(
-                "[{}] [{}] Buffer not empty! Buffer has length {}.",
-                info.term,
-                get_pretty_time(),
-                writer.buffer().len()
-            );
-        }
-
-        writer.flush().unwrap();
-        // Debugging possible issues with the buffer
+    if !writer.buffer().is_empty() {
         println!(
-            "[{}] [{}] Buffer flushed. Final buffer length: {}.",
+            "[{}] [{}] Buffer not empty! Buffer has length {}.",
             info.term,
             get_pretty_time(),
             writer.buffer().len()
         );
     }
+
+    writer.flush().unwrap();
+    // Debugging possible issues with the buffer
+    println!(
+        "[{}] [{}] Buffer flushed. Final buffer length: {}.",
+        info.term,
+        get_pretty_time(),
+        writer.buffer().len()
+    );
 }
 
-#[cfg(feature = "scraper")]
-struct CourseFile {
-    /// The file containing data combined from *all* sections.
-    overall_file: File,
+pub async fn try_login(state: &Arc<WrapperState>) -> bool {
+    let address = format!(
+        "{}:{}",
+        state.api_base_endpoint.address, state.api_base_endpoint.port
+    );
+    let mut num_failures = 0;
 
-    /// The file**s** containing data for each section family.
-    section_files: HashMap<String, File>,
-}
+    while num_failures < MAX_NUM_FAILURES {
+        tokio::time::sleep(Duration::from_secs(TIME_BETWEEN_WAIT_SEC)).await;
 
-// in the form: (enrolled, available, waitlisted, total)
-#[cfg(feature = "scraper")]
-#[derive(Clone, Copy, Default)]
-struct CourseStat(i64, i64, i64, i64);
+        if state.should_stop() {
+            break;
+        }
 
-#[cfg(feature = "scraper")]
-impl Add<CourseStat> for CourseStat {
-    type Output = CourseStat;
+        let Ok(data) = state
+            .client
+            .get(format!("http://{address}/cookie"))
+            .send()
+            .await
+        else {
+            num_failures += 1;
+            continue;
+        };
 
-    fn add(self, rhs: CourseStat) -> Self::Output {
-        CourseStat(
-            self.0 + rhs.0,
-            self.1 + rhs.1,
-            self.2 + rhs.2,
-            self.3 + rhs.3,
-        )
+        let Ok(text) = data.text().await else {
+            num_failures += 1;
+            continue;
+        };
+
+        let json: Value = serde_json::from_str(text.as_str()).unwrap_or_default();
+        if !json["cookie"].is_string() {
+            continue;
+        }
+
+        let cookies = json["cookie"].as_str().unwrap().to_string();
+
+        // Update the cookies for the general wrapper, but also authenticate the cookies.
+        // Remember, we're sharing the same cookies.
+        if login_with_cookies(&state.wrapper, cookies.as_str(), state).await {
+            return true;
+        }
+
+        num_failures += 1;
     }
+
+    false
 }
 
-#[cfg(feature = "scraper")]
-impl AddAssign<CourseStat> for CourseStat {
-    fn add_assign(&mut self, rhs: CourseStat) {
-        self.0 += rhs.0;
-        self.1 += rhs.1;
-        self.2 += rhs.2;
-        self.3 += rhs.3;
-    }
-}
+async fn login_with_cookies(
+    wrapper: &WebRegWrapper,
+    cookies: &str,
+    state: &Arc<WrapperState>,
+) -> bool {
+    wrapper.set_cookies(cookies);
 
-#[cfg(feature = "scraper")]
-impl Sum for CourseStat {
-    fn sum<I: Iterator<Item = Self>>(iter: I) -> Self {
-        // For our use case here, it is assumed that we have at least one element.
-        iter.reduce(|prev, next| prev + next).unwrap_or_default()
+    let mut num_tries = 0;
+    while num_tries < MAX_NUM_REGISTER {
+        tokio::time::sleep(Duration::from_secs(TIME_BETWEEN_WAIT_SEC)).await;
+
+        if wrapper.register_all_terms().await.is_err() {
+            num_tries += 1;
+            continue;
+        };
+
+        // to ensure that login was successful, try to get all courses and ensure those courses are not empty for all terms.
+        let mut is_successful = true;
+        for term in state.all_terms.keys() {
+            let Ok(all_courses) = wrapper
+                .req(term)
+                .parsed()
+                .search_courses(SearchType::Advanced(SearchRequestBuilder::new()))
+                .await
+            else {
+                is_successful = false;
+                break;
+            };
+
+            if all_courses.is_empty() {
+                is_successful = false;
+                break;
+            }
+        }
+
+        if !is_successful {
+            continue;
+        }
+
+        break;
     }
+
+    num_tries < MAX_NUM_REGISTER
 }

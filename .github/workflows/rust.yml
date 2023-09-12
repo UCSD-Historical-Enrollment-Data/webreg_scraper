@@ -11,22 +11,8 @@ env:
   RUSTFLAGS: "-Dwarnings"
 
 jobs:
-  validate_features:
-    name: ${{ matrix.feature }} only / compile
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        feature: ["api", "scraper"]
-
-    steps:
-      - uses: actions/checkout@v3
-      - name: Check
-        run: cargo check --no-default-features --features ${{ matrix.feature }}
-      - name: Clippy
-        run: cargo clippy --all-targets --all-features --no-default-features --features ${{ matrix.feature }}
-
   validate_general:
-    name: general / compilation & style
+    name: compilation & style
     runs-on: ubuntu-latest
 
     steps:
