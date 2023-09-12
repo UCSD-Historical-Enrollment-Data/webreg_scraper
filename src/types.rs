@@ -99,7 +99,15 @@ impl WrapperState {
         self.stop_flag.load(Ordering::SeqCst)
     }
 
-    /// Indicates whether the scraper is running.
+    /// Sets the stop flag to the specified value.
+    ///
+    /// # Parameters
+    /// - `stop_status`: The stop status to set.
+    pub fn set_stop_flag(&self, stop_status: bool) {
+        self.stop_flag.store(stop_status, Ordering::SeqCst);
+    }
+
+    /// Indicates whether the scraper for _all_ terms is running.
     ///
     /// # Returns
     /// `true` if the scraper is running, and `false` otherwise.

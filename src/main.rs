@@ -77,7 +77,7 @@ async fn shutdown_signal(state: Arc<WrapperState>) {
 
     // Intercept ctrl_c event
     info!("Invoked ctrl+c event, stopping the scraper and server.");
-    state.stop_flag.store(true, Ordering::SeqCst);
+    state.set_stop_flag(true);
     while state.is_running() {
         tokio::time::sleep(Duration::from_secs(1)).await;
     }

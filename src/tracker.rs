@@ -151,6 +151,8 @@ pub async fn track_webreg_enrollment(
         );
 
         for r in results {
+            // If the stop flag is set so that the scraper itself should STOP, or we just need
+            // to stop for this iteration, then break out
             if state.should_stop() || current_loop_stop_flag.load(Ordering::SeqCst) {
                 break 'main;
             }
