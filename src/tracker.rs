@@ -1,12 +1,13 @@
-use std::sync::atomic::Ordering;
+use futures::stream::FuturesUnordered;
+use futures::StreamExt;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
 use serde_json::Value;
 use tokio::time::Instant;
-use tracing::{error, info};
+use tracing::{info, warn};
 use webweg::wrapper::input_types::{SearchRequestBuilder, SearchType};
-use webweg::wrapper::WebRegWrapper;
 
 use {
     crate::util::get_epoch_time,
@@ -19,27 +20,47 @@ use crate::types::{TermInfo, WrapperState};
 
 const TIME_BETWEEN_WAIT_SEC: u64 = 3;
 const MAX_NUM_REGISTER: usize = 25;
-const MAX_NUM_FAILURES: usize = 50;
-const MAX_RECENT_REQUESTS: usize = 2000;
+const MAX_NUM_SEARCH_REQUESTS: usize = 12;
+const MAX_NUM_LOGIN_FAILURES: usize = 50;
 
 /// Runs the WebReg tracker. This will optionally attempt to reconnect to
 /// WebReg when signed out.
 ///
 /// # Parameters
 /// - `state`: The wrapper state.
-/// - `wrapper_info`: The wrapper information.
 /// - `verbose`: Whether the logging should be verbose.
-pub async fn run_tracker(state: Arc<WrapperState>, wrapper_info: Arc<TermInfo>, verbose: bool) {
+pub async fn run_tracker(state: Arc<WrapperState>, verbose: bool) {
     try_login(&state).await;
     loop {
         state.is_running.store(true, Ordering::SeqCst);
-        track_webreg_enrollment(&state, &wrapper_info, verbose).await;
+
+        let current_loop_stop_flag = Arc::new(AtomicBool::new(false));
+        let mut futures = FuturesUnordered::new();
+        for term_data in state.all_terms.values() {
+            futures.push(track_webreg_enrollment(
+                &state,
+                term_data,
+                verbose,
+                current_loop_stop_flag.clone(),
+            ));
+        }
+
+        // Wait until ONE of the futures completed, indicating that ONE of the
+        // runners is now done.
+        futures.next().await;
+        info!("A tracker is currently done. Attempting to stop other trackers.");
+        current_loop_stop_flag.store(true, Ordering::SeqCst);
+        while let Some(()) = futures.next().await {
+            // Do nothing.
+        }
         state.is_running.store(false, Ordering::SeqCst);
 
+        info!("All trackers have been stopped.");
         if state.should_stop() {
             break;
         }
 
+        // Attempt to login again.
         if try_login(&state).await {
             continue;
         }
@@ -51,7 +72,7 @@ pub async fn run_tracker(state: Arc<WrapperState>, wrapper_info: Arc<TermInfo>, 
     // This should only run if we're 100% done with this
     // wrapper. For example, either the wrapper could not
     // log back in or we forced it to stop.
-    info!("[{}] Quitting.", wrapper_info.term);
+    info!("Quitting.");
 }
 
 /// Tracks WebReg for enrollment information. This will continuously check specific courses for
@@ -62,7 +83,14 @@ pub async fn run_tracker(state: Arc<WrapperState>, wrapper_info: Arc<TermInfo>, 
 /// - `state`: The wrapper state.
 /// - `info`: The term information.
 /// - `verbose`: Whether logging should be verbose.
-pub async fn track_webreg_enrollment(state: &Arc<WrapperState>, info: &TermInfo, verbose: bool) {
+/// - `current_loop_stop_flag`: Whether to stop any further requests for this function call
+///                             instance.
+pub async fn track_webreg_enrollment(
+    state: &Arc<WrapperState>,
+    info: &TermInfo,
+    verbose: bool,
+    current_loop_stop_flag: Arc<AtomicBool>,
+) {
     let mut writer = {
         let file_name = format!(
             "enrollment_{}_{}.csv",
@@ -112,7 +140,7 @@ pub async fn track_webreg_enrollment(state: &Arc<WrapperState>, info: &TermInfo,
         };
 
         if results.is_empty() {
-            error!("[{}] No courses found. Exiting.", info.term);
+            warn!("[{}] No courses found. Exiting.", info.term);
             break;
         }
 
@@ -123,12 +151,12 @@ pub async fn track_webreg_enrollment(state: &Arc<WrapperState>, info: &TermInfo,
         );
 
         for r in results {
-            if state.should_stop() {
+            if state.should_stop() || current_loop_stop_flag.load(Ordering::SeqCst) {
                 break 'main;
             }
 
-            if fail_count != 0 && fail_count > 12 {
-                error!(
+            if fail_count != 0 && fail_count > MAX_NUM_SEARCH_REQUESTS {
+                warn!(
                     "[{}] Too many failures when trying to request data from WebReg.",
                     info.term
                 );
@@ -148,7 +176,7 @@ pub async fn track_webreg_enrollment(state: &Arc<WrapperState>, info: &TermInfo,
             match res {
                 Err(e) => {
                     fail_count += 1;
-                    error!(
+                    warn!(
                         "[{}] An error occurred ({}). Skipping. (FAIL_COUNT: {})",
                         info.term, e, fail_count
                     );
@@ -186,7 +214,7 @@ pub async fn track_webreg_enrollment(state: &Arc<WrapperState>, info: &TermInfo,
                 }
                 _ => {
                     fail_count += 1;
-                    error!(
+                    warn!(
                         "[{}] Course {} {} not found. Were you logged out? (FAIL_COUNT: {}).",
                         info.term,
                         r.subj_code.trim(),
@@ -198,25 +226,7 @@ pub async fn track_webreg_enrollment(state: &Arc<WrapperState>, info: &TermInfo,
 
             // Record time spent on request.
             let end_time = start_time.elapsed();
-            info.tracker.num_requests.fetch_add(1, Ordering::SeqCst);
-            let time_spent = end_time.as_millis() as usize;
-            info.tracker
-                .total_time_spent
-                .fetch_add(time_spent, Ordering::SeqCst);
-
-            // Put this part of the code in its own scope so that
-            // we unlock the mutex as soon as we're done with it.
-            // Otherwise, we'd have to wait until the sleep call
-            // is done before the mutex is unlocked.
-            {
-                // Add the most recent request to the deque, removing the oldest if necessary.
-                let mut recent_requests = info.tracker.recent_requests.lock().await;
-                while recent_requests.len() >= MAX_RECENT_REQUESTS {
-                    recent_requests.pop_front();
-                }
-
-                recent_requests.push_back(time_spent);
-            }
+            info.tracker.add_stat(end_time.as_millis() as usize);
 
             // Sleep between requests so we don't get ourselves banned by webreg
             tokio::time::sleep(Duration::from_secs_f64(info.cooldown)).await;
@@ -241,20 +251,32 @@ pub async fn track_webreg_enrollment(state: &Arc<WrapperState>, info: &TermInfo,
     );
 }
 
+/// Attempts to run the login script to get new session cookies, and then ensures that the
+/// cookies themselves are valid.
+///
+/// # Parameters
+/// - `state`: The wrapper state.
+///
+/// # Returns
+/// `true` if the login process is successful, indicating that the wrapper is ready to
+/// make requests again. `false` otherwise.
 pub async fn try_login(state: &Arc<WrapperState>) -> bool {
+    info!("Attempting to get new WebReg session cookies.");
     let address = format!(
         "{}:{}",
-        state.api_base_endpoint.address, state.api_base_endpoint.port
+        state.cookie_server.address, state.cookie_server.port
     );
     let mut num_failures = 0;
 
-    while num_failures < MAX_NUM_FAILURES {
+    while num_failures < MAX_NUM_LOGIN_FAILURES {
         tokio::time::sleep(Duration::from_secs(TIME_BETWEEN_WAIT_SEC)).await;
 
         if state.should_stop() {
+            warn!("Application state indicates that the process should stop, stopping.");
             break;
         }
 
+        info!("Making a request to the cookie server (http://{address}/cookie) to get session cookies.");
         let Ok(data) = state
             .client
             .get(format!("http://{address}/cookie"))
@@ -266,12 +288,15 @@ pub async fn try_login(state: &Arc<WrapperState>) -> bool {
         };
 
         let Ok(text) = data.text().await else {
+            warn!("An unknown error occurred when making a request to the cookie server.");
             num_failures += 1;
             continue;
         };
 
         let json: Value = serde_json::from_str(text.as_str()).unwrap_or_default();
+        info!("Received response from cookie server: '{json}'");
         if !json["cookie"].is_string() {
+            warn!("The 'cookie' key from the response is not present.");
             continue;
         }
 
@@ -279,43 +304,67 @@ pub async fn try_login(state: &Arc<WrapperState>) -> bool {
 
         // Update the cookies for the general wrapper, but also authenticate the cookies.
         // Remember, we're sharing the same cookies.
-        if login_with_cookies(&state.wrapper, cookies.as_str(), state).await {
+        if login_with_cookies(state, cookies.as_str()).await {
+            info!("Cookies were successfully fetched and authenticated for all terms specified.");
             return true;
         }
 
+        warn!("An unknown error occurred when trying to authenticate the cookies.");
         num_failures += 1;
     }
 
     false
 }
 
-async fn login_with_cookies(
-    wrapper: &WebRegWrapper,
-    cookies: &str,
-    state: &Arc<WrapperState>,
-) -> bool {
-    wrapper.set_cookies(cookies);
+/// Sets the cookies to the specified wrapper and then attempts to validate that the
+/// cookies are valid. This will attempt to make several requests until either one
+/// request is successful or all requests fail.
+///
+/// # Parameters
+/// - `state`: The wrapper state.
+/// - `cookies`: The session cookies to use.
+///
+/// # Returns
+/// `true` if the login process is successful, indicating that the wrapper is ready to
+/// make requests again. `false` otherwise.
+#[inline]
+async fn login_with_cookies(state: &Arc<WrapperState>, cookies: &str) -> bool {
+    state.wrapper.set_cookies(cookies);
 
     let mut num_tries = 0;
     while num_tries < MAX_NUM_REGISTER {
         tokio::time::sleep(Duration::from_secs(TIME_BETWEEN_WAIT_SEC)).await;
 
-        if wrapper.register_all_terms().await.is_err() {
+        info!("Attempting to register all terms for the given session cookies.");
+        if let Err(e) = state.wrapper.register_all_terms().await {
+            warn!("An error occurred when trying to register all terms: '{e}'");
             num_tries += 1;
             continue;
         };
 
-        // to ensure that login was successful, try to get all courses and ensure those courses are not empty for all terms.
+        info!(
+            "All terms for the cookies were registered. Now, checking that requests can be made."
+        );
+        // To ensure that login was successful, try to get all courses and ensure those courses
+        // are not empty for all terms.
         let mut is_successful = true;
         for term in state.all_terms.keys() {
-            let Ok(all_courses) = wrapper
+            let all_courses = match state
+                .wrapper
                 .req(term)
                 .parsed()
                 .search_courses(SearchType::Advanced(SearchRequestBuilder::new()))
                 .await
-            else {
-                is_successful = false;
-                break;
+            {
+                Ok(o) => {
+                    info!("Found {} courses for the term '{term}'", o.len());
+                    o
+                }
+                Err(e) => {
+                    warn!("Failed to fetch courses for term '{term}'; error received: '{e}'");
+                    is_successful = false;
+                    break;
+                }
             };
 
             if all_courses.is_empty() {

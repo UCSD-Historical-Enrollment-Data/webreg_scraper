@@ -54,15 +54,12 @@ async fn main() -> ExitCode {
 
     // Run the tracker for each term
     let state = Arc::new(WrapperState::new(config_info));
-    for (_, term_info) in state.all_terms.iter() {
-        let this_state = state.clone();
-        let this_term_info = term_info.clone();
-        tokio::spawn(async move {
-            run_tracker(this_state, this_term_info, is_verbose).await;
-        });
-
-        tokio::time::sleep(Duration::from_secs_f64(STARTUP_COOLDOWN)).await;
-    }
+    tokio::spawn({
+        let cloned_state = state.clone();
+        async move {
+            run_tracker(cloned_state, is_verbose).await;
+        }
+    });
 
     shutdown_signal(state.clone()).await;
     ExitCode::SUCCESS

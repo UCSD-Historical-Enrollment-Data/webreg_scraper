@@ -1,29 +1,42 @@
 {
   "configName": "Production Configuration",
-  "apiInfo": {
+  "apiBaseEndpoint": {
     "address": "0.0.0.0",
     "port": 3000
   },
-  "verbose": false,
+  "cookieServer": {
+    "address": "127.0.0.1",
+    "port": 3001
+  },
+  "verbose": true,
   "wrapperData": [
     {
-      "term": "WI23",
-      "cooldown": 0.5,
-      "recoveryInfo": {
-        "address": "127.0.0.1",
-        "port": 3001
-      },
+      "term": "FA23",
+      "cooldown": 0.2,
       "searchQuery": [
         {
-          "levels": ["g"],
-          "departments": ["MATH", "CSE", "COGS", "ECE"]
-        },
-        {
-          "levels": ["l", "u"],
+          "levels": [
+            "l",
+            "u",
+            "g"
+          ],
           "departments": []
         }
       ],
-      "applyBeforeUse": false
+      "saveDataToFile": true
+    },
+    {
+      "term": "S323",
+      "cooldown": 2.5,
+      "searchQuery": [
+        {
+          "levels": [
+            "l"
+          ],
+          "departments": ["ECE"]
+        }
+      ],
+      "saveDataToFile": true
     }
   ]
 }

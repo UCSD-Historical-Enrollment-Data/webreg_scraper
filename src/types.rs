@@ -1,13 +1,14 @@
 use std::collections::{HashMap, VecDeque};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
-use tokio::sync::Mutex;
 use webweg::wrapper::input_types::{CourseLevelFilter, SearchRequestBuilder};
 use webweg::wrapper::wrapper_builder::WebRegWrapperBuilder;
 use webweg::wrapper::WebRegWrapper;
+
+const MAX_RECENT_REQUESTS: usize = 2000;
 
 /// A structure that represents the current state of all wrappers.
 pub struct WrapperState {
@@ -26,34 +27,6 @@ pub struct WrapperState {
     pub api_base_endpoint: AddressPortInfo,
     /// The cookie server.
     pub cookie_server: AddressPortInfo,
-}
-
-pub type WrapperMap = HashMap<String, Arc<TermInfo>>;
-
-/// A structure that holds basic stats about the tracker's requests.
-#[derive(Default)]
-pub struct StatTracker {
-    /// The amount of time it took for the 100 most requests to finish processing.
-    pub recent_requests: Mutex<VecDeque<usize>>,
-    /// The number of requests that have been made thus far.
-    pub num_requests: AtomicUsize,
-    /// The total amount of time spent making those requests, in milliseconds.
-    pub total_time_spent: AtomicUsize,
-}
-
-/// A structure that holds information relating to the scraper and, more importantly, the
-/// scraper instances themselves.
-pub struct TermInfo {
-    /// The term associated with this scraper.
-    pub term: String,
-    /// The cooldown, in seconds, between requests.
-    pub cooldown: f64,
-    /// The courses to search for.
-    pub search_query: Vec<SearchRequestBuilder>,
-    /// Tracker stats. This field contains information on the performance of the scraper.
-    pub tracker: StatTracker,
-    /// Whether we should save data scraped for this term to a file.
-    pub should_save: bool,
 }
 
 impl WrapperState {
@@ -133,6 +106,48 @@ impl WrapperState {
     pub fn is_running(&self) -> bool {
         self.is_running.load(Ordering::SeqCst)
     }
+}
+
+pub type WrapperMap = HashMap<String, Arc<TermInfo>>;
+
+/// A structure that holds basic stats about the tracker's requests.
+#[derive(Default)]
+pub struct StatTracker {
+    /// The amount of time it took for the 100 most requests to finish processing.
+    pub recent_requests: Mutex<VecDeque<usize>>,
+    /// The number of requests that have been made thus far.
+    pub num_requests: AtomicUsize,
+    /// The total amount of time spent making those requests, in milliseconds.
+    pub total_time_spent: AtomicUsize,
+}
+
+impl StatTracker {
+    pub fn add_stat(&self, time_of_req: usize) {
+        self.num_requests.fetch_add(1, Ordering::SeqCst);
+        self.total_time_spent
+            .fetch_add(time_of_req, Ordering::SeqCst);
+        let mut recent_requests = self.recent_requests.lock().unwrap();
+        while recent_requests.len() >= MAX_RECENT_REQUESTS {
+            recent_requests.pop_front();
+        }
+
+        recent_requests.push_back(time_of_req);
+    }
+}
+
+/// A structure that holds information relating to the scraper and, more importantly, the
+/// scraper instances themselves.
+pub struct TermInfo {
+    /// The term associated with this scraper.
+    pub term: String,
+    /// The cooldown, in seconds, between requests.
+    pub cooldown: f64,
+    /// The courses to search for.
+    pub search_query: Vec<SearchRequestBuilder>,
+    /// Tracker stats. This field contains information on the performance of the scraper.
+    pub tracker: StatTracker,
+    /// Whether we should save data scraped for this term to a file.
+    pub should_save: bool,
 }
 
 /// A structure that represents a configuration file specifically for the scraper. See the
