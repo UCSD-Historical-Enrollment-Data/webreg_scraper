@@ -122,6 +122,10 @@ pub struct StatTracker {
 }
 
 impl StatTracker {
+    /// Adds a stat to the `StatTracker` instance.
+    ///
+    /// # Parameters
+    /// - `time_of_req`: The time it took to make a request.
     pub fn add_stat(&self, time_of_req: usize) {
         self.num_requests.fetch_add(1, Ordering::SeqCst);
         self.total_time_spent
