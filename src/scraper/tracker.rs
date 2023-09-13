@@ -9,14 +9,13 @@ use tokio::time::Instant;
 use tracing::{info, warn};
 use webweg::wrapper::input_types::{SearchRequestBuilder, SearchType};
 
+use crate::scraper::util::get_epoch_time;
+use crate::types::{TermInfo, WrapperState};
 use {
-    crate::util::get_epoch_time,
     std::fs::OpenOptions,
     std::io::{BufWriter, Write},
     std::path::Path,
 };
-
-use crate::types::{TermInfo, WrapperState};
 
 const TIME_BETWEEN_WAIT_SEC: u64 = 3;
 const MAX_NUM_REGISTER: usize = 25;

@@ -6,8 +6,6 @@ edition = "2021"
 description = "A scraper and/or API for UC San Diego's WebReg enrollment system."
 repository = "https://github.com/ewang2002/webreg_scraper"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
 [dependencies]
 anyhow = "1.0.71"
 axum = "0.6.20"

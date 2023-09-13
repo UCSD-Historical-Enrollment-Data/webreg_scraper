@@ -1,16 +1,14 @@
-use crate::tracker::run_tracker;
+use crate::scraper::tracker::run_tracker;
 use crate::types::{ConfigScraper, WrapperState};
 use std::fs;
 use std::path::Path;
 use std::process::ExitCode;
-use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use std::time::Duration;
 use tracing::log::{error, info};
 
-mod tracker;
+mod scraper;
 mod types;
-mod util;
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
