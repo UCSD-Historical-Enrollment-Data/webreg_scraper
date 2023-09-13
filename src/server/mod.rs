@@ -76,6 +76,7 @@ pub fn create_router(app_state: Arc<WrapperState>) -> Router {
         .route("/timing/:term", get(status::get_timing_stats))
         .route("/login_stat/:stat", get(status::get_login_script_stats))
         .with_state(app_state.clone());
+
     #[cfg(feature = "auth")]
     {
         router.layer(mw::from_fn_with_state(
@@ -84,5 +85,7 @@ pub fn create_router(app_state: Arc<WrapperState>) -> Router {
         ))
     }
     #[cfg(not(feature = "auth"))]
-    router
+    {
+        router
+    }
 }

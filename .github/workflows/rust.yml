@@ -11,22 +11,24 @@ env:
   RUSTFLAGS: "-Dwarnings"
 
 jobs:
-  validate_general:
-    name: compilation & style
+  validate_default:
+    name: compilation & style (default)
     runs-on: ubuntu-latest
 
     steps:
       - uses: actions/checkout@v3
-      - name: Check
-        run: cargo check
+      - name: Format
+        run: cargo fmt --all -- --check
+      - name: Clippy
+        run: cargo clippy --all-targets
+
+  validate_auth:
+    name: complication & style (auth)
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
       - name: Format
         run: cargo fmt --all -- --check
       - name: Clippy
         run: cargo clippy --all-targets --all-features
-
-      # Don't use clippy-check for now as it is currently using a deprecated version of Node.
-      # - name: Clippy
-      #   uses: actions-rs/clippy-check@v1
-      #   with:
-      #     token: ${{ secrets.GITHUB_TOKEN }}
-      #     args: --all-targets --all-features
