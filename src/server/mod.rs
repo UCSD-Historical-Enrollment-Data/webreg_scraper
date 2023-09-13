@@ -4,9 +4,11 @@ use axum::routing::{get, post};
 use axum::{middleware as mw, Router};
 
 use crate::server::endpoints::{status, ww_cookies, ww_general};
-use crate::server::middleware::{cookie_validator, running_validator, term_validator};
+use crate::server::middleware::*;
 use crate::types::WrapperState;
 
+#[cfg(feature = "auth")]
+pub mod auth;
 mod endpoints;
 mod middleware;
 mod types;
@@ -68,10 +70,19 @@ pub fn create_router(app_state: Arc<WrapperState>) -> Router {
             running_validator::validate_wrapper_running,
         ));
 
-    Router::new()
+    let router = Router::new()
         .route("/health", get(status::get_health))
         .nest("/live/:term", webreg_router)
         .route("/timing/:term", get(status::get_timing_stats))
         .route("/login_stat/:stat", get(status::get_login_script_stats))
-        .with_state(app_state)
+        .with_state(app_state.clone());
+    #[cfg(feature = "auth")]
+    {
+        router.layer(mw::from_fn_with_state(
+            app_state.clone(),
+            auth_validator::auth,
+        ))
+    }
+    #[cfg(not(feature = "auth"))]
+    router
 }

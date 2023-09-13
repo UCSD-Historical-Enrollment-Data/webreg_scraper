@@ -28,6 +28,9 @@ pub struct WrapperState {
     pub api_base_endpoint: AddressPortInfo,
     /// The cookie server.
     pub cookie_server: AddressPortInfo,
+    /// The authentication manager, to be used by the server.
+    #[cfg(feature = "auth")]
+    pub auth_manager: crate::server::auth::AuthManager,
 }
 
 impl WrapperState {
@@ -91,6 +94,8 @@ impl WrapperState {
                 .unwrap(),
             api_base_endpoint: config.api_base_endpoint,
             cookie_server: config.cookie_server,
+            #[cfg(feature = "auth")]
+            auth_manager: crate::server::auth::AuthManager::new(),
         }
     }
 
