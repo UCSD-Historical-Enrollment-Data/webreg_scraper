@@ -7,7 +7,7 @@ use crate::types::WrapperState;
 use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
-use axum::{Extension, Json};
+use axum::Json;
 use tracing::log::info;
 
 /// A function which should be called when the `terms` endpoint from the `general`
@@ -28,7 +28,6 @@ pub async fn get_course_info(
     Path(term): Path<String>,
     Query(crsc): Query<CourseQueryStr>,
     Query(req_type): Query<RawQueryStr>,
-    Extension(_prefix): Extension<String>,
     State(s): State<Arc<WrapperState>>,
 ) -> Response {
     info!("GET endpoint `course_info` called");

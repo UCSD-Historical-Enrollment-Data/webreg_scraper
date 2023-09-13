@@ -12,7 +12,7 @@
   "wrapperData": [
     {
       "term": "FA23",
-      "cooldown": 0.2,
+      "cooldown": 5,
       "searchQuery": [
         {
           "levels": [
@@ -27,7 +27,7 @@
     },
     {
       "term": "S323",
-      "cooldown": 2.5,
+      "cooldown": 5,
       "searchQuery": [
         {
           "levels": [
