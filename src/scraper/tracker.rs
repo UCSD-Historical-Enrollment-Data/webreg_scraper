@@ -89,7 +89,7 @@ pub async fn run_tracker(state: Arc<WrapperState>, verbose: bool) {
 /// - `verbose`: Whether logging should be verbose.
 /// - `current_loop_stop_flag`: Whether to stop any further requests for this function call
 ///                             instance.
-pub async fn track_webreg_enrollment(
+async fn track_webreg_enrollment(
     state: &Arc<WrapperState>,
     info: &TermInfo,
     verbose: bool,
@@ -266,7 +266,7 @@ pub async fn track_webreg_enrollment(
 /// # Returns
 /// `true` if the login process is successful, indicating that the wrapper is ready to
 /// make requests again. `false` otherwise.
-pub async fn try_login(state: &Arc<WrapperState>) -> bool {
+async fn try_login(state: &Arc<WrapperState>) -> bool {
     info!("Attempting to get new WebReg session cookies.");
     let address = format!(
         "{}:{}",

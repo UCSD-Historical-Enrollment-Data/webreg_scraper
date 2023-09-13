@@ -1,2 +1,2 @@
 pub mod tracker;
-pub mod util;
+mod util;
