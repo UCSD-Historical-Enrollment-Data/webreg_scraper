@@ -80,9 +80,7 @@ impl WrapperState {
             is_running: AtomicBool::from(false),
             client: Default::default(),
             wrapper: WebRegWrapperBuilder::new()
-                .with_client(Default::default())
                 .with_cookies("To be loaded later")
-                .should_close_after_request(true)
                 .try_build_wrapper()
                 .unwrap(),
             api_base_endpoint: config.api_base_endpoint,
