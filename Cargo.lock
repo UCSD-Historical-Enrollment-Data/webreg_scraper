@@ -1545,7 +1545,8 @@ dependencies = [
 [[package]]
 name = "webweg"
 version = "0.9.0"
-source = "git+https://github.com/ewang2002/webweg.git?branch=refactor/no-default-term#c0d0721ce879b92ba9880a0e2549b26e3d5e0198"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5859139996503636912f2876dfca4576a50bdeb1578a91fb96e47c2cab7e3662"
 dependencies = [
  "parking_lot",
  "reqwest",
