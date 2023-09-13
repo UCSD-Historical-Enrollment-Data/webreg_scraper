@@ -1,13 +1,17 @@
 use crate::scraper::tracker::run_tracker;
+use crate::server::create_router;
 use crate::types::{ConfigScraper, WrapperState};
 use std::fs;
+use std::net::SocketAddr;
 use std::path::Path;
 use std::process::ExitCode;
+use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
 use tracing::log::{error, info};
 
 mod scraper;
+mod server;
 mod types;
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -59,7 +63,26 @@ async fn main() -> ExitCode {
         }
     });
 
-    shutdown_signal(state.clone()).await;
+    let addr = SocketAddr::from_str(
+        format!(
+            "{}:{}",
+            state.api_base_endpoint.address.as_str(),
+            state.api_base_endpoint.port
+        )
+        .as_str(),
+    );
+
+    info!(
+        "Server started on address {}:{}",
+        state.api_base_endpoint.address.as_str(),
+        state.api_base_endpoint.port
+    );
+
+    axum::Server::bind(&addr.unwrap())
+        .serve(create_router(state.clone()).into_make_service())
+        .with_graceful_shutdown(shutdown_signal(state))
+        .await
+        .unwrap();
     ExitCode::SUCCESS
 }
 
