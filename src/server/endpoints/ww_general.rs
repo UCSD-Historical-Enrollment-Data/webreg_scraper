@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use crate::server::endpoints::endpoint_types::{
+use crate::server::types::{
     ApiErrorType, BodySearchType, CourseQueryStr, RawParsedApiResp, RawQueryStr,
 };
 use crate::types::WrapperState;

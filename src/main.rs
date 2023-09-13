@@ -8,7 +8,7 @@ use std::process::ExitCode;
 use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
-use tracing::log::{error, info};
+use tracing::log::{error, info, warn};
 
 mod scraper;
 mod server;
@@ -97,7 +97,7 @@ async fn shutdown_signal(state: Arc<WrapperState>) {
         .expect("Expected shutdown signal handler.");
 
     // Intercept ctrl_c event
-    info!("Invoked ctrl+c event, stopping the scraper and server.");
+    warn!("Invoked ctrl+c event, stopping the scraper and server.");
     state.set_stop_flag(true);
     while state.is_running() {
         tokio::time::sleep(Duration::from_secs(1)).await;

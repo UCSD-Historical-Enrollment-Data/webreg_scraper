@@ -5,7 +5,6 @@ use std::sync::{Arc, Mutex};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use webweg::wrapper::input_types::{CourseLevelFilter, SearchRequestBuilder};
-use webweg::wrapper::wrapper_builder::WebRegWrapperBuilder;
 use webweg::wrapper::WebRegWrapper;
 
 const MAX_RECENT_REQUESTS: usize = 2000;
@@ -22,6 +21,8 @@ pub struct WrapperState {
     pub client: Client,
     /// The wrapper that can be used to make requests to WebReg.
     pub wrapper: WebRegWrapper,
+    /// A wrapper to be used to serve requests that involve other cookies.
+    pub c_wrapper: WebRegWrapper,
     /// The address for which the endpoints specified in this application is made
     /// available for other applications to use.
     pub api_base_endpoint: AddressPortInfo,
@@ -79,8 +80,13 @@ impl WrapperState {
             stop_flag: AtomicBool::from(false),
             is_running: AtomicBool::from(false),
             client: Default::default(),
-            wrapper: WebRegWrapperBuilder::new()
+            wrapper: WebRegWrapper::builder()
                 .with_cookies("To be loaded later")
+                .try_build_wrapper()
+                .unwrap(),
+            c_wrapper: WebRegWrapper::builder()
+                .with_cookies("To be determined by the user's cookies.")
+                .should_close_after_request(true)
                 .try_build_wrapper()
                 .unwrap(),
             api_base_endpoint: config.api_base_endpoint,

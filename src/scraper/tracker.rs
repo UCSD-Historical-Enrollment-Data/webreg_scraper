@@ -6,6 +6,7 @@ use std::time::Duration;
 
 use serde_json::Value;
 use tokio::time::Instant;
+use tracing::log::error;
 use tracing::{info, warn};
 use webweg::wrapper::input_types::{SearchRequestBuilder, SearchType};
 
@@ -29,7 +30,11 @@ const MAX_NUM_LOGIN_FAILURES: usize = 50;
 /// - `state`: The wrapper state.
 /// - `verbose`: Whether the logging should be verbose.
 pub async fn run_tracker(state: Arc<WrapperState>, verbose: bool) {
-    try_login(&state).await;
+    if !try_login(&state).await {
+        error!("Initial login could not be completed, so the tracker will no longer run.");
+        return;
+    }
+
     loop {
         state.is_running.store(true, Ordering::SeqCst);
 
@@ -71,7 +76,7 @@ pub async fn run_tracker(state: Arc<WrapperState>, verbose: bool) {
     // This should only run if we're 100% done with this
     // wrapper. For example, either the wrapper could not
     // log back in or we forced it to stop.
-    info!("Quitting.");
+    info!("Quitting the tracker.");
 }
 
 /// Tracks WebReg for enrollment information. This will continuously check specific courses for
@@ -278,14 +283,18 @@ pub async fn try_login(state: &Arc<WrapperState>) -> bool {
         }
 
         info!("Making a request to the cookie server (http://{address}/cookie) to get session cookies.");
-        let Ok(data) = state
+        let data = match state
             .client
             .get(format!("http://{address}/cookie"))
             .send()
             .await
-        else {
-            num_failures += 1;
-            continue;
+        {
+            Ok(o) => o,
+            Err(e) => {
+                warn!("Failed to connect to the cookie server; reason: '{e}'");
+                num_failures += 1;
+                continue;
+            }
         };
 
         let Ok(text) = data.text().await else {
