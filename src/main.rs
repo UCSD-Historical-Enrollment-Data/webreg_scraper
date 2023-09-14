@@ -16,10 +16,6 @@ mod types;
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
-/// The interval to start each instance. In other words, the number of seconds between starting
-/// two scrapers.
-pub const STARTUP_COOLDOWN: f64 = 1.5;
-
 #[tokio::main]
 async fn main() -> ExitCode {
     tracing_subscriber::fmt::init();

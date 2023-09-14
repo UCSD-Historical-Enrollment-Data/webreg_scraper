@@ -59,8 +59,6 @@ pub fn create_router(app_state: Arc<WrapperState>) -> Router {
             term_validator::validate_term,
         ));
 
-    // General router (no term)
-
     // Live WebReg router.
     let webreg_router = Router::new()
         .merge(parsed_router)

@@ -367,7 +367,7 @@ async fn login_with_cookies(state: &Arc<WrapperState>, cookies: &str) -> bool {
                 .await
             {
                 Ok(o) => {
-                    info!("Found {} courses for the term '{term}'", o.len());
+                    info!("Found {} courses for the term '{term}'.", o.len());
                     o
                 }
                 Err(e) => {
