@@ -71,6 +71,7 @@ export function isValidTimeZone(tz: string): boolean {
  * may occur.
  * @param {Function} func The function to run.
  * @return {Promise<T | null>} The result, if any. Null otherwise.
+ * @typedef T The function return value.
  */
 export async function tryExecuteAsync<T = void>(func: () => Promise<T | null>): Promise<T | null> {
     try {

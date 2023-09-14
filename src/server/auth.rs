@@ -3,13 +3,18 @@ use rusqlite::{params, Connection};
 use std::sync::Mutex;
 use uuid::Uuid;
 
+/// A structure representing a simple authentication manager.
 pub struct AuthManager {
     /// The SQLite database that is responsible for holding the database information.
     pub db: Mutex<Connection>,
 }
 
 impl AuthManager {
-    /// Creates a new instance of the `AuthManager`.
+    /// Creates a new instance of the `AuthManager`. This will create a new SQLite table\
+    /// containing API keys _if_ the table doesn't exist.
+    ///
+    /// # Returns
+    /// The authentication manager.
     pub fn new() -> Self {
         let conn = Connection::open("auth.db").unwrap();
         conn.execute(include_str!("../../sql/init_table.sql"), ())
@@ -24,7 +29,6 @@ impl AuthManager {
     ///
     /// # Returns
     /// A new API key.
-    #[allow(unused)]
     pub fn generate_api_key(&self) -> String {
         let prefix = Uuid::new_v4().to_string();
         let key = Uuid::new_v4().to_string();

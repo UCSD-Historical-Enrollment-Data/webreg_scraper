@@ -4,7 +4,7 @@
   "description": "Automatically sends a message when the scraper is offline.",
   "main": "index.js",
   "scripts": {
-    "compile": "tsc -p .",
+    "compile": "tsc -p ",
     "start": "npm run compile && node out/index.js"
   },
   "keywords": [],
