@@ -17,7 +17,7 @@ impl AuthManager {
     /// The authentication manager.
     pub fn new() -> Self {
         let conn = Connection::open("auth.db").unwrap();
-        conn.execute(include_str!("../../sql/init_table.sql"), ())
+        conn.execute(include_str!("../../../sql/init_table.sql"), ())
             .unwrap();
 
         Self {
@@ -37,7 +37,7 @@ impl AuthManager {
         let date_time = Utc::now();
         let expiration_time = date_time + Duration::days(365);
         conn.execute(
-            include_str!("../../sql/insert_table.sql"),
+            include_str!("../../../sql/insert_table.sql"),
             (&prefix, &key, date_time, expiration_time),
         )
         .unwrap();
@@ -56,7 +56,7 @@ impl AuthManager {
     pub fn check_key(&self, prefix: &str, key: &str) -> AuthCheckResult {
         let conn = self.db.lock().unwrap();
         let mut row = conn
-            .prepare(include_str!("../../sql/get_by_prefix.sql"))
+            .prepare(include_str!("../../../sql/get_by_prefix.sql"))
             .unwrap();
         let mut res: Vec<_> = row
             .query_map(params![prefix, key], |row| {

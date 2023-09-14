@@ -67,6 +67,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "authmanager"
+version = "0.1.0"
+
+[[package]]
 name = "autocfg"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1523,7 +1527,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "webreg_scraper"
+name = "webreg"
 version = "0.5.0"
 dependencies = [
  "anyhow",
