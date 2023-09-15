@@ -11,21 +11,23 @@
 A program designed to both scrape UCSD's WebReg for enrollment data and make the WebReg API available to other applications.
 
 ## Crates
-This project is broken up into two binary crates, defined by a workspace.
+This project is broken up into two binary crates, defined by a workspace. To see more information about them, just click
+on the crate name.
 
 | Binary Crate | Information |
 | ------------ |-------------|
-| `webreg` | This is the actual scraper _and_ API application. |
-| `authmanager` | A simple authentication manager for the API. |
+| [`webreg`](https://github.com/ewang2002/webreg_scraper/tree/master/crates/webreg) | This is the actual scraper _and_ API application. |
+| [`authmanager`](https://github.com/ewang2002/webreg_scraper/tree/master/crates/authmanager) | A simple authentication manager for the API. |
 
 
 ## Scripts
-This repository contains two scripts, one of which is required for the scraper to work properly.
+This repository contains two scripts, one of which is required for the scraper to work properly. To see more information 
+about them, just click on the script name.
 
-| Program | Information |
-| ------- |-------------|
-| `webregautoin` | A basic web server designed to automatically log the scraper into WebReg. **This is required.** |
-| `notifierbot` | A simple Discord Bot that notifies you if the scraper is not working. |
+| Script Name | Information |
+| ----------- |-------------|
+| [`webregautoin`](https://github.com/ewang2002/webreg_scraper/tree/master/scripts/webregautoin) | A basic web server designed to automatically log the scraper into WebReg. **This is required.** |
+| [`notifierbot`](https://github.com/ewang2002/webreg_scraper/tree/master/scripts/notifierbot) | A simple script that uses Discord webhooks to notify you if the scraper is not working. |
 
 This program _requires_ the `webregautoin` helper program.
 
