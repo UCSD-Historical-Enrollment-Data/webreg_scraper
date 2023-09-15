@@ -95,7 +95,7 @@ impl WrapperState {
             api_base_endpoint: config.api_base_endpoint,
             cookie_server: config.cookie_server,
             #[cfg(feature = "auth")]
-            auth_manager: basicauth::AuthManager::new(),
+            auth_manager: basicauth::AuthManager::new("auth.db"),
         }
     }
 
