@@ -10,13 +10,13 @@ pub struct AuthManager {
 }
 
 impl AuthManager {
-    /// Creates a new instance of the `AuthManager`. This will create a new SQLite table\
+    /// Creates a new instance of the `AuthManager`. This will create a new SQLite table
     /// containing API keys _if_ the table doesn't exist.
     ///
     /// # Returns
     /// The authentication manager.
     pub fn new() -> Self {
-        let conn = Connection::open("auth.db").unwrap();
+        let conn = Connection::open("../../../../auth.db").unwrap();
         conn.execute(include_str!("../../../sql/init_table.sql"), ())
             .unwrap();
 
@@ -40,7 +40,7 @@ impl AuthManager {
             include_str!("../../../sql/insert_table.sql"),
             (&prefix, &key, date_time, expiration_time),
         )
-        .unwrap();
+            .unwrap();
 
         format!("{prefix}#{key}")
     }

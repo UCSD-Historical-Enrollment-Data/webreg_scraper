@@ -7,8 +7,6 @@ use crate::server::endpoints::{status, ww_cookies, ww_general};
 use crate::server::middleware::*;
 use crate::types::WrapperState;
 
-#[cfg(feature = "auth")]
-pub mod auth;
 mod endpoints;
 mod middleware;
 mod types;

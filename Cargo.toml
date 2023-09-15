@@ -1,8 +1,9 @@
 [workspace]
 resolver = "2"
 members = [
-    "webreg",
-    "authmanager"
+    "crates/webreg",
+    "crates/authmanager",
+    "crates/basicauth"
 ]
 
 [profile.release]

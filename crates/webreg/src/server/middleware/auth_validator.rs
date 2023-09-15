@@ -1,4 +1,4 @@
-use crate::server::auth::AuthCheckResult;
+use basicauth::AuthCheckResult;
 use crate::types::WrapperState;
 use axum::extract::State;
 use axum::http::{header, Request, StatusCode};
