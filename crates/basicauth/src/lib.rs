@@ -104,10 +104,7 @@ impl AuthManager {
             .prepare(include_str!("../../../sql/delete_by_prefix.sql"))
             .unwrap();
 
-        match stmt.execute(params![prefix]) {
-            Ok(n) if n > 0 => true,
-            _ => false,
-        }
+        matches!(stmt.execute(params![prefix]), Ok(n) if n > 0)
     }
 
     /// Edits the description associated with a prefix.
@@ -124,10 +121,7 @@ impl AuthManager {
             .prepare(include_str!("../../../sql/edit_desc_by_prefix.sql"))
             .unwrap();
 
-        match stmt.execute(params![desc, prefix]) {
-            Ok(n) if n > 0 => true,
-            _ => false,
-        }
+        matches!(stmt.execute(params![desc, prefix]), Ok(n) if n > 0)
     }
 
     /// Gets all prefixes currently in this database.
