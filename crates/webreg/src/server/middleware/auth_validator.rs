@@ -51,7 +51,7 @@ pub async fn auth<B>(
             req.extensions_mut().insert(prefix.to_owned());
             Ok(next.run(req).await)
         }
-        AuthCheckResult::NoPrefixOrKeyFound => {
+        AuthCheckResult::NoPrefixOrTokenFound => {
             info!("The given token is either not valid, or the key doesn't exist.");
 
             Err((

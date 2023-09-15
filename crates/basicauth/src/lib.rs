@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use chrono::{DateTime, Duration, Utc};
 use rusqlite::{params, Connection};
 use std::sync::Mutex;
@@ -41,16 +42,20 @@ impl AuthManager {
     ///
     /// # Returns
     /// A new API key.
-    pub fn generate_api_key(&self, desc: Option<&str>) -> String {
+    pub fn generate_api_key<'a>(&self, desc: Option<impl Into<Cow<'a, str>>>) -> String {
         let prefix = Uuid::new_v4().to_string();
         let key = Uuid::new_v4().to_string();
         let conn = self.db.lock().unwrap();
+        let description = match desc {
+            None => None,
+            Some(s) => Some(s.into())
+        };
 
         let date_time = Utc::now();
         let expiration_time = date_time + Duration::days(365);
         conn.execute(
             include_str!("../../../sql/insert_table.sql"),
-            params![&prefix, &key, date_time, expiration_time, desc],
+            params![&prefix, &key, date_time, expiration_time, description],
         )
         .unwrap();
 
@@ -61,24 +66,24 @@ impl AuthManager {
     ///
     /// # Parameters
     /// - `prefix`: The prefix, used to identify the user.
-    /// - `key`: The key.
+    /// - `token`: The token associated with this key.
     ///
     /// # Returns
     /// The check results.
-    pub fn check_key(&self, prefix: &str, key: &str) -> AuthCheckResult {
+    pub fn check_key(&self, prefix: &str, token: &str) -> AuthCheckResult {
         let conn = self.db.lock().unwrap();
         let mut stmt = conn
             .prepare(include_str!("../../../sql/get_by_prefix.sql"))
             .unwrap();
         let mut res: Vec<_> = stmt
-            .query_map(params![prefix, key], |row| {
+            .query_map(params![prefix, token], |row| {
                 Ok(row.get::<_, DateTime<Utc>>(EXP_AT_COLUMN).unwrap())
             })
             .unwrap()
             .collect();
 
         if res.is_empty() {
-            return AuthCheckResult::NoPrefixOrKeyFound;
+            return AuthCheckResult::NoPrefixOrTokenFound;
         }
 
         let elem = res.pop().unwrap();
@@ -115,13 +120,17 @@ impl AuthManager {
     ///
     /// # Returns
     /// `true` if modification was successful, and `false` otherwise.
-    pub fn edit_description_by_prefix(&self, prefix: &str, desc: Option<&str>) -> bool {
+    pub fn edit_description_by_prefix<'a>(&self, prefix: &str, desc: Option<impl Into<Cow<'a, str>>>) -> bool {
         let conn = self.db.lock().unwrap();
         let mut stmt = conn
             .prepare(include_str!("../../../sql/edit_desc_by_prefix.sql"))
             .unwrap();
+        let description = match desc {
+            None => None,
+            Some(s) => Some(s.into())
+        };
 
-        matches!(stmt.execute(params![desc, prefix]), Ok(n) if n > 0)
+        matches!(stmt.execute(params![description, prefix]), Ok(n) if n > 0)
     }
 
     /// Gets all prefixes currently in this database.
@@ -144,14 +153,14 @@ impl AuthManager {
     ///
     /// # Returns
     /// A list of all entries.
-    pub fn get_all_entries(&self) -> Vec<KeyEntry> {
+    pub fn get_all_entries(&self) -> Vec<ApiKeyEntry> {
         let conn = self.db.lock().unwrap();
         let mut stmt = conn
             .prepare(include_str!("../../../sql/get_all_entries.sql"))
             .unwrap();
 
         stmt.query_map((), |row| {
-            Ok(KeyEntry {
+            Ok(ApiKeyEntry {
                 prefix: row.get::<_, String>(PREFIX_COLUMN).unwrap(),
                 token: row.get::<_, String>(TOKEN_COLUMN).unwrap(),
                 created_at: row.get::<_, DateTime<Utc>>(CREATED_AT_COLUMN).unwrap(),
@@ -171,13 +180,13 @@ pub enum AuthCheckResult {
     /// Whether the prefix exists and the associated key is valid.
     Valid,
     /// Whether the prefix does not exist, or the key is not found.
-    NoPrefixOrKeyFound,
+    NoPrefixOrTokenFound,
     /// Whether the key has expired.
     ExpiredKey,
 }
 
 /// Represents an entry in the database.
-pub struct KeyEntry {
+pub struct ApiKeyEntry {
     /// The prefix for this API key.
     pub prefix: String,
     /// The token for this API key.

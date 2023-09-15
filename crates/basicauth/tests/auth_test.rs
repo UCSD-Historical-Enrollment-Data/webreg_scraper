@@ -13,11 +13,11 @@ fn test_add_keys_check() {
     assert_eq!(AuthCheckResult::Valid, manager.check_key(prefix1, token1));
     assert_eq!(AuthCheckResult::Valid, manager.check_key(prefix2, token2));
     assert_eq!(
-        AuthCheckResult::NoPrefixOrKeyFound,
+        AuthCheckResult::NoPrefixOrTokenFound,
         manager.check_key(prefix2, token1)
     );
     assert_eq!(
-        AuthCheckResult::NoPrefixOrKeyFound,
+        AuthCheckResult::NoPrefixOrTokenFound,
         manager.check_key(prefix1, token2)
     );
 }
@@ -76,7 +76,7 @@ fn test_delete_key() {
     assert_eq!(3, all_prefixes.len());
     assert!(manager.delete_by_prefix(prefix2));
     assert_eq!(
-        AuthCheckResult::NoPrefixOrKeyFound,
+        AuthCheckResult::NoPrefixOrTokenFound,
         manager.check_key(prefix2, token2)
     );
 
