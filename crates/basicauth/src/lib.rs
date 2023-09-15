@@ -1,6 +1,6 @@
-use std::borrow::Cow;
 use chrono::{DateTime, Duration, Utc};
 use rusqlite::{params, Connection};
+use std::borrow::Cow;
 use std::sync::Mutex;
 use uuid::Uuid;
 
@@ -46,10 +46,7 @@ impl AuthManager {
         let prefix = Uuid::new_v4().to_string();
         let key = Uuid::new_v4().to_string();
         let conn = self.db.lock().unwrap();
-        let description = match desc {
-            None => None,
-            Some(s) => Some(s.into())
-        };
+        let description = desc.map(|s| s.into());
 
         let date_time = Utc::now();
         let expiration_time = date_time + Duration::days(365);
@@ -120,16 +117,16 @@ impl AuthManager {
     ///
     /// # Returns
     /// `true` if modification was successful, and `false` otherwise.
-    pub fn edit_description_by_prefix<'a>(&self, prefix: &str, desc: Option<impl Into<Cow<'a, str>>>) -> bool {
+    pub fn edit_description_by_prefix<'a>(
+        &self,
+        prefix: &str,
+        desc: Option<impl Into<Cow<'a, str>>>,
+    ) -> bool {
         let conn = self.db.lock().unwrap();
         let mut stmt = conn
             .prepare(include_str!("../../../sql/edit_desc_by_prefix.sql"))
             .unwrap();
-        let description = match desc {
-            None => None,
-            Some(s) => Some(s.into())
-        };
-
+        let description = desc.map(|s| s.into());
         matches!(stmt.execute(params![description, prefix]), Ok(n) if n > 0)
     }
 
