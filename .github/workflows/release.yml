@@ -30,7 +30,7 @@ jobs:
           bin: webreg
           tar: unix
           zip: windows
-          archive: $bin-$target-${{ matrix.features }}
+          archive: webreg-$target-${{ matrix.features }}
           token: ${{ secrets.GITHUB_TOKEN }}
           features: ${{ matrix.features }}
 
@@ -48,7 +48,7 @@ jobs:
           bin: webreg
           tar: unix
           zip: windows
-          archive: $bin-$target-default
+          archive: webreg-$target-default
           token: ${{ secrets.GITHUB_TOKEN }}
 
   publish_authmanager_default:
@@ -65,5 +65,5 @@ jobs:
           bin: authmanager
           tar: unix
           zip: windows
-          archive: $bin-$target-default
+          archive: authmanager-$target
           token: ${{ secrets.GITHUB_TOKEN }}
