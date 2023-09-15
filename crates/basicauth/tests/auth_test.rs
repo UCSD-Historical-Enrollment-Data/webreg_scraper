@@ -12,8 +12,14 @@ fn test_add_keys_check() {
 
     assert_eq!(AuthCheckResult::Valid, manager.check_key(prefix1, token1));
     assert_eq!(AuthCheckResult::Valid, manager.check_key(prefix2, token2));
-    assert_eq!(AuthCheckResult::NoPrefixOrKeyFound, manager.check_key(prefix2, token1));
-    assert_eq!(AuthCheckResult::NoPrefixOrKeyFound, manager.check_key(prefix1, token2));
+    assert_eq!(
+        AuthCheckResult::NoPrefixOrKeyFound,
+        manager.check_key(prefix2, token1)
+    );
+    assert_eq!(
+        AuthCheckResult::NoPrefixOrKeyFound,
+        manager.check_key(prefix1, token2)
+    );
 }
 
 #[test]
@@ -37,13 +43,25 @@ fn test_edit_description() {
     let (prefix1, _) = key1.split_once('#').unwrap();
 
     let all_entries = manager.get_all_entries();
-    assert_eq!(Some("this is a test".to_owned()), all_entries[0].description);
-    assert_eq!(Some("this is another test".to_owned()), all_entries[1].description);
+    assert_eq!(
+        Some("this is a test".to_owned()),
+        all_entries[0].description
+    );
+    assert_eq!(
+        Some("this is another test".to_owned()),
+        all_entries[1].description
+    );
 
     manager.edit_description_by_prefix(prefix1, Some("this is a test 2.0"));
     let all_entries2 = manager.get_all_entries();
-    assert_eq!(Some("this is a test 2.0".to_owned()), all_entries2[0].description);
-    assert_eq!(Some("this is another test".to_owned()), all_entries2[1].description);
+    assert_eq!(
+        Some("this is a test 2.0".to_owned()),
+        all_entries2[0].description
+    );
+    assert_eq!(
+        Some("this is another test".to_owned()),
+        all_entries2[1].description
+    );
 }
 
 #[test]
@@ -57,7 +75,10 @@ fn test_delete_key() {
     let all_prefixes = manager.get_all_prefixes();
     assert_eq!(3, all_prefixes.len());
     assert!(manager.delete_by_prefix(prefix2));
-    assert_eq!(AuthCheckResult::NoPrefixOrKeyFound, manager.check_key(prefix2, token2));
+    assert_eq!(
+        AuthCheckResult::NoPrefixOrKeyFound,
+        manager.check_key(prefix2, token2)
+    );
 
     let all_prefixes2 = manager.get_all_prefixes();
     assert_eq!(2, all_prefixes2.len());

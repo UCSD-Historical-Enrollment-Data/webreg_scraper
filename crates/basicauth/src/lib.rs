@@ -52,7 +52,7 @@ impl AuthManager {
             include_str!("../../../sql/insert_table.sql"),
             params![&prefix, &key, date_time, expiration_time, desc],
         )
-            .unwrap();
+        .unwrap();
 
         format!("{prefix}#{key}")
     }
@@ -106,7 +106,7 @@ impl AuthManager {
 
         match stmt.execute(params![prefix]) {
             Ok(n) if n > 0 => true,
-            _ => false
+            _ => false,
         }
     }
 
@@ -126,7 +126,7 @@ impl AuthManager {
 
         match stmt.execute(params![desc, prefix]) {
             Ok(n) if n > 0 => true,
-            _ => false
+            _ => false,
         }
     }
 
@@ -140,10 +140,7 @@ impl AuthManager {
             .prepare(include_str!("../../../sql/get_all_entries.sql"))
             .unwrap();
 
-        stmt
-            .query_map((), |row| {
-                Ok(row.get::<_, String>(PREFIX_COLUMN).unwrap())
-            })
+        stmt.query_map((), |row| Ok(row.get::<_, String>(PREFIX_COLUMN).unwrap()))
             .unwrap()
             .map(|data| data.unwrap())
             .collect()
@@ -159,19 +156,18 @@ impl AuthManager {
             .prepare(include_str!("../../../sql/get_all_entries.sql"))
             .unwrap();
 
-        stmt
-            .query_map((), |row| {
-                Ok(KeyEntry {
-                    prefix: row.get::<_, String>(PREFIX_COLUMN).unwrap(),
-                    token: row.get::<_, String>(TOKEN_COLUMN).unwrap(),
-                    created_at: row.get::<_, DateTime<Utc>>(CREATED_AT_COLUMN).unwrap(),
-                    expires_at: row.get::<_, DateTime<Utc>>(EXP_AT_COLUMN).unwrap(),
-                    description: row.get::<_, Option<String>>(DESCRIPTION_COLUMN).unwrap()
-                })
+        stmt.query_map((), |row| {
+            Ok(KeyEntry {
+                prefix: row.get::<_, String>(PREFIX_COLUMN).unwrap(),
+                token: row.get::<_, String>(TOKEN_COLUMN).unwrap(),
+                created_at: row.get::<_, DateTime<Utc>>(CREATED_AT_COLUMN).unwrap(),
+                expires_at: row.get::<_, DateTime<Utc>>(EXP_AT_COLUMN).unwrap(),
+                description: row.get::<_, Option<String>>(DESCRIPTION_COLUMN).unwrap(),
             })
-            .unwrap()
-            .map(|data| data.unwrap())
-            .collect()
+        })
+        .unwrap()
+        .map(|data| data.unwrap())
+        .collect()
     }
 }
 

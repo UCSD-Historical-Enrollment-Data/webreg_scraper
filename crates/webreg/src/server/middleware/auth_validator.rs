@@ -1,10 +1,10 @@
-use basicauth::AuthCheckResult;
 use crate::types::WrapperState;
 use axum::extract::State;
 use axum::http::{header, Request, StatusCode};
 use axum::middleware::Next;
 use axum::response::IntoResponse;
 use axum::Json;
+use basicauth::AuthCheckResult;
 use serde_json::{json, Value};
 use std::sync::Arc;
 use tracing::log::{info, warn};
