@@ -306,7 +306,7 @@ async fn try_login(state: &Arc<WrapperState>) -> bool {
         let json: Value = serde_json::from_str(text.as_str()).unwrap_or_default();
         info!("Received response from cookie server: '{json}'");
         if !json["cookie"].is_string() {
-            warn!("The 'cookie' key from the response is not present.");
+            warn!("The 'cookie' key from the response is not valid.");
             continue;
         }
 
