@@ -21,6 +21,7 @@ use crate::server::types::{
 use crate::server::util::{build_add_plan_object, build_add_section_object};
 use crate::types::WrapperState;
 
+/// A function which should be called when the `register_term` endpoint is called.
 #[tracing::instrument(level = "info", skip(s))]
 pub async fn post_register_term(
     headers: HeaderMap,
@@ -42,8 +43,7 @@ pub async fn post_register_term(
         )
 }
 
-/// A function which should be called when the `schedule` endpoint from the
-/// `parsed` route is called.
+/// A function which should be called when the `schedule` endpoint is called.
 #[tracing::instrument(level = "info", skip(s))]
 pub async fn get_schedule(
     headers: HeaderMap,
@@ -66,8 +66,7 @@ pub async fn get_schedule(
     .into_response()
 }
 
-/// A function which should be called when the `schedule` endpoint from the
-/// `parsed` route is called.
+/// A function which should be called when the `schedule` endpoint is called.
 #[tracing::instrument(level = "info", skip(s))]
 pub async fn get_schedule_list(
     headers: HeaderMap,
@@ -88,8 +87,7 @@ pub async fn get_schedule_list(
     .into_response()
 }
 
-/// A function which should be called when the `events` endpoint from the
-/// `parsed` route is called.
+/// A function which should be called when the `events` endpoint is called.
 #[tracing::instrument(level = "info", skip(s))]
 pub async fn get_events(
     headers: HeaderMap,
@@ -113,8 +111,7 @@ pub async fn get_events(
     )
 }
 
-/// A function which should be called when the `rename_schedule` endpoint from the
-/// `parsed` route is called.
+/// A function which should be called when the `rename_schedule` endpoint is called.
 #[tracing::instrument(level = "info", skip(s))]
 pub async fn post_rename_schedule(
     headers: HeaderMap,
@@ -139,8 +136,7 @@ pub async fn post_rename_schedule(
     )
 }
 
-/// A function which should be called when the `validate_add_section` endpoint from the
-/// `parsed` route is called.
+/// A function which should be called when the `validate_add_section` endpoint is called.
 #[tracing::instrument(level = "info", skip(s))]
 pub async fn post_validate_add_section(
     headers: HeaderMap,
@@ -166,8 +162,7 @@ pub async fn post_validate_add_section(
     )
 }
 
-/// A function which should be called when the `add_section` endpoint from the
-/// `parsed` route is called.
+/// A function which should be called when the `add_section` endpoint is called.
 #[tracing::instrument(level = "info", skip(s))]
 pub async fn post_add_section(
     headers: HeaderMap,
@@ -193,8 +188,7 @@ pub async fn post_add_section(
     )
 }
 
-/// A function which should be called when the `validate_add_plan` endpoint from the
-/// `parsed` route is called.
+/// A function which should be called when the `validate_add_plan` endpoint is called.
 #[tracing::instrument(level = "info", skip(s))]
 pub async fn post_validate_add_plan(
     headers: HeaderMap,
@@ -220,8 +214,7 @@ pub async fn post_validate_add_plan(
     )
 }
 
-/// A function which should be called when the `add_plan` endpoint from the
-/// `parsed` route is called.
+/// A function which should be called when the `add_plan` endpoint is called.
 #[tracing::instrument(level = "info", skip(s))]
 pub async fn post_add_plan(
     headers: HeaderMap,
@@ -247,8 +240,7 @@ pub async fn post_add_plan(
     )
 }
 
-/// A function which should be called when the `remove_plan` endpoint from the
-/// `parsed` route is called.
+/// A function which should be called when the `remove_plan` endpoint is called.
 #[tracing::instrument(level = "info", skip(s))]
 pub async fn post_remove_plan(
     headers: HeaderMap,
@@ -273,8 +265,7 @@ pub async fn post_remove_plan(
     )
 }
 
-/// A function which should be called when the `drop_section` endpoint from the
-/// `parsed` route is called.
+/// A function which should be called when the `drop_section` endpoint is called.
 #[tracing::instrument(level = "info", skip(s))]
 pub async fn post_drop_section(
     headers: HeaderMap,

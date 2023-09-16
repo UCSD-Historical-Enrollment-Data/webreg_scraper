@@ -29,6 +29,7 @@ pub async fn get_health(State(s): State<Arc<WrapperState>>) -> Response {
 /// /<term>/timing
 /// ```
 #[tracing::instrument(skip(s))]
+#[tracing::instrument(skip(s))]
 pub async fn get_timing_stats(
     Path(term): Path<String>,
     State(s): State<Arc<WrapperState>>,
