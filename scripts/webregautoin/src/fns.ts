@@ -178,7 +178,7 @@ export async function fetchCookies(config: IContext, browser: puppeteer.Browser)
                 return 0;
             })(),
             // Here, we *repeatedly* check to see if the Duo 2FA frame is visible AND some components of
-            // the frame (in our case, the "Rememebr Me" checkbox) are visible.
+            // the frame (in our case, the "Remember Me" checkbox) are visible.
             (async () => {
                 const interval = await new Promise<NodeJS.Timeout>(r => {
                     const internalInterval = setInterval(async () => {

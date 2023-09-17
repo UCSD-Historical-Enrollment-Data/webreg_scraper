@@ -40,7 +40,7 @@ async function main(): Promise<void> {
     const debug = args.values.debug ?? false;
     let browser: puppeteer.Browser = await puppeteer.launch({
         args: ['--no-sandbox', '--disable-setuid-sandbox'],
-        // If debug mode is on, turn OFF headless mode
+        // If debug mode is true, turn OFF headless mode
         headless: !debug
     });
 

@@ -22,13 +22,6 @@ pub async fn get_health(State(s): State<Arc<WrapperState>>) -> Response {
 }
 
 /// An endpoint for checking the time stats for a specific term's scrapers.
-///
-/// # Usage
-/// The endpoint should be called like so:
-/// ```
-/// /<term>/timing
-/// ```
-#[tracing::instrument(skip(s))]
 #[tracing::instrument(skip(s))]
 pub async fn get_timing_stats(
     Path(term): Path<String>,
@@ -56,12 +49,7 @@ pub async fn get_timing_stats(
 }
 
 /// An endpoint for checking the status of a specific term's scrapers.
-///
-/// # Usage
-/// The endpoint should be called like so:
-/// ```
-/// /<stat_type>
-/// ```
+#[tracing::instrument(skip(s))]
 pub async fn get_login_script_stats(
     Path(stat_type): Path<String>,
     State(s): State<Arc<WrapperState>>,
