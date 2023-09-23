@@ -1,0 +1,12 @@
+[package]
+name = "authmanager"
+description = """
+A simple authentication manager that can be used to manage authorization tokens for the scraper's WebReg API.
+"""
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+clap = { version = "4.4", features = ["derive"] }
+tabled = "0.14"
+basicauth = { path = "../basicauth" }
