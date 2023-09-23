@@ -4,7 +4,7 @@ import * as path from "path";
 import { getCurrentTime, getDateTime, IConfiguration, stopFor, tryExecuteAsync } from "./util";
 
 const AXIOS: AxiosInstance = axios.create();
-const COOLDOWN: number = 90 * 1000;
+const COOLDOWN: number = 5 * 60 * 1000;
 const DIVIDER: string = "========================================================";
 
 async function main() {
@@ -41,12 +41,22 @@ async function check(term: string, config: IConfiguration): Promise<void> {
 
     // Check the status of each endpoint
     const lookupRes: unknown[] | { "error": string } | null = await tryExecuteAsync(async () => {
-        const data = await AXIOS.get(`http://127.0.0.1:3000/webreg/course_info/${term}?subject=CSE&number=8A`);
+        let data = await AXIOS.get(`http://127.0.0.1:3000/live/${term}/course_info?subject=CSE&number=8A`, {
+            headers: {
+                "Authorization": `Bearer ${config.apiKey}`
+            }
+        });
+
         return data.data;
     });
 
-    const statusRes: { "status": boolean } | { "error": string } | null = await tryExecuteAsync(async () => {
-        const data = await AXIOS.get(`http://127.0.0.1:3000/scraper/term_status/${term}`);
+    const statusRes: { "api": boolean } | { "error": string } | null = await tryExecuteAsync(async () => {
+        const data = await AXIOS.get(`http://127.0.0.1:3000/health`, {
+            headers: {
+                "Authorization": `Bearer ${config.apiKey}`
+            }
+        });
+
         return data.data;
     });
 
@@ -55,27 +65,27 @@ async function check(term: string, config: IConfiguration): Promise<void> {
     if (!Array.isArray(lookupRes)) {
         if (lookupRes) {
             strToSend.push(
-                "⚠️ `[Lookup]` The scraper returned an error message: ```",
+                "⚠️ `[Lookup/8A]` The scraper returned an error message: ```",
                 lookupRes.error,
                 "```"
             );
         }
         else {
             strToSend.push(
-                "❌ `[Lookup]` The scraper did not respond to the lookup request and might be down.",
+                "❌ `[Lookup/8A]` The scraper did not respond to the lookup request and might be down.",
             );
         }
     }
 
     // Status might not be.
     if (statusRes) {
-        if ("status" in statusRes && !statusRes.status) {
+        if ("api" in statusRes && !statusRes.api) {
             strToSend.push(
-                "⚠️ `[Status]` The scraper is currently not running.");
+                "⚠️ `[Status/Health]` The scraper is currently not running.");
         }
         else if ("error" in statusRes) {
             strToSend.push(
-                "⚠️ `[Status]` The scraper returned an error message: ```",
+                "⚠️ `[Status/Health]` The scraper returned an error message: ```",
                 statusRes.error,
                 "```"
             );
@@ -83,18 +93,18 @@ async function check(term: string, config: IConfiguration): Promise<void> {
     }
     else {
         strToSend.push(
-            "❌ `[Status]` The scraper did not respond to the status request and might be down.",
+            "❌ `[Status/Health]` The scraper did not respond to the status request and might be down.",
         );
     }
 
     if (strToSend.length > 0) {
-        const baseMsg = `**\`[${term} • ${getCurrentTime()}]\`** __**Scraper Warning**__\n${strToSend.join("\n")}`;
+        const baseMsg = `# **\`[${term} • ${getCurrentTime()}]\`** __**"something brokeeeeeeeee" - ruby**__\n${strToSend.join("\n")}`;
         for (const {url, peopleToPing} of config.webhookUrls) {
             let actualMsg = baseMsg;
             if (peopleToPing.length > 0) {
                 actualMsg += "\n" + (peopleToPing.map(x => `<@${x}>`).join(", "));
             }
-            
+
             actualMsg += `\n${DIVIDER}`;
 
             try {
@@ -111,7 +121,5 @@ async function check(term: string, config: IConfiguration): Promise<void> {
     await stopFor(COOLDOWN);
     check(term, config).then();
 }
-
-
 
 main().then();

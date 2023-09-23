@@ -104,7 +104,7 @@ export function waitFor(ms: number): Promise<void> {
  * - `"ERROR UNABLE TO AUTHENTICATE."`, if the script is unable to log into WebReg
  * after a certain number of tries.
  */
-export async function fetchCookies(config: IContext, browser: puppeteer.Browser): Promise<string> {
+export async function fetchCookies(config: IContext, browser: puppeteer.Browser, isInit: boolean): Promise<string> {
     const termLog = config.termInfo?.termName ?? "ALL";
     logNice(termLog, "GetCookies function called.");
 
@@ -248,6 +248,11 @@ export async function fetchCookies(config: IContext, browser: puppeteer.Browser)
         // No go button means we need to log in.
         // We could just check if (r === 1) though
         if (!(await page.$("#startpage-button-go"))) {
+            if (!isInit) {
+                logNice(termLog, "Attempting to send request to Duo, but this wasn't supposed to happen");
+                throw new Error("ruby is bad");
+            }
+
             logNice(termLog, "Beginning Duo 2FA process. Do not accept yet.");
             // Need to find a duo iframe so we can actually authenticate
             const possDuoFrame = await page.$("iframe[id='duo_iframe']");

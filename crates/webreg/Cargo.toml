@@ -1,9 +1,9 @@
 [package]
 name = "webreg"
-version = "0.5.0-rc.1"
+version = "0.5.0-rc.2"
 authors = ["Edward Wang"]
 edition = "2021"
-description = "A scraper and/or API for UC San Diego's WebReg enrollment system."
+description = "A scraper and API for UC San Diego's WebReg enrollment system."
 repository = "https://github.com/ewang2002/webreg_scraper"
 
 [dependencies]

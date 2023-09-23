@@ -19,6 +19,8 @@ on the crate name.
 | [`webreg`](https://github.com/ewang2002/webreg_scraper/tree/master/crates/webreg) | This is the actual scraper _and_ API application. |
 | [`authmanager`](https://github.com/ewang2002/webreg_scraper/tree/master/crates/authmanager) | A simple authentication manager for the API. |
 
+`webreg` is the main binary in this project. Therefore, the project version is based on `webreg`'s version.
+
 
 ## Scripts
 This repository contains two scripts, one of which is required for the scraper to work properly. To see more information 
@@ -30,6 +32,9 @@ about them, just click on the script name.
 | [`notifierbot`](https://github.com/ewang2002/webreg_scraper/tree/master/scripts/notifierbot) | A simple script that uses Discord webhooks to notify you if the scraper is not working. |
 
 This program _requires_ the `webregautoin` helper program.
+
+## Documentation
+Basic documentation is provided in the [wiki](https://github.com/ewang2002/webreg_scraper/wiki). 
 
 ## License
 Everything in this repository is licensed under the MIT license.

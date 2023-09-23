@@ -18,10 +18,19 @@ use {
     std::path::Path,
 };
 
-const TIME_BETWEEN_WAIT_SEC: u64 = 3;
-const MAX_NUM_REGISTER: usize = 25;
+/// The number of times we should allow consecutive failure requests before attempting to get
+/// new session cookies.
 const MAX_NUM_SEARCH_REQUESTS: usize = 12;
-const MAX_NUM_LOGIN_FAILURES: usize = 50;
+/// The number of times we should attempt to get new session cookies.
+const MAX_NUM_LOGIN_FAILURES: i32 = 30;
+/// The number of times we should attempt to register the session cookies.
+const MAX_NUM_REGISTER: usize = 25;
+/// The base delay when getting new session cookies. Note that, when attempting to get new
+/// session cookies, we want to use exponential backoff to ensure that if we can't get cookies
+/// the first time, we wait a bit longer before trying again.
+const BASE_DELAY_FOR_SESSION_COOKIE: f64 = 8.0;
+/// The general delay, i.e., the delay between making requests.
+const GENERAL_DELAY: u64 = 3;
 
 /// Runs the WebReg tracker. This will optionally attempt to reconnect to
 /// WebReg when signed out.
@@ -272,10 +281,14 @@ async fn try_login(state: &Arc<WrapperState>) -> bool {
         "{}:{}",
         state.cookie_server.address, state.cookie_server.port
     );
-    let mut num_failures = 0;
 
-    while num_failures < MAX_NUM_LOGIN_FAILURES {
-        tokio::time::sleep(Duration::from_secs(TIME_BETWEEN_WAIT_SEC)).await;
+    let mut num_failures = 0;
+    while num_failures <= MAX_NUM_LOGIN_FAILURES {
+        let delay_time = 1.2_f64.powi(num_failures) * BASE_DELAY_FOR_SESSION_COOKIE;
+        info!(
+            "Waiting {delay_time} seconds before making request for new cookies ({num_failures}/{MAX_NUM_LOGIN_FAILURES})."
+        );
+        tokio::time::sleep(Duration::from_secs_f64(delay_time)).await;
 
         if state.should_stop() {
             warn!("Application state indicates that the process should stop, stopping.");
@@ -342,13 +355,15 @@ async fn login_with_cookies(state: &Arc<WrapperState>, cookies: &str) -> bool {
     state.wrapper.set_cookies(cookies);
 
     let mut num_tries = 0;
-    while num_tries < MAX_NUM_REGISTER {
-        tokio::time::sleep(Duration::from_secs(TIME_BETWEEN_WAIT_SEC)).await;
+    while num_tries <= MAX_NUM_REGISTER {
+        tokio::time::sleep(Duration::from_secs(GENERAL_DELAY)).await;
 
         info!("Attempting to register all terms for the given session cookies.");
         if let Err(e) = state.wrapper.register_all_terms().await {
-            warn!("An error occurred when trying to register all terms: '{e}'");
             num_tries += 1;
+            warn!(
+                "An error occurred when trying to register all terms ({num_tries}/{MAX_NUM_REGISTER}): '{e}'"
+            );
             continue;
         };
 
@@ -371,7 +386,8 @@ async fn login_with_cookies(state: &Arc<WrapperState>, cookies: &str) -> bool {
                     o
                 }
                 Err(e) => {
-                    warn!("Failed to fetch courses for term '{term}'; error received: '{e}'");
+                    num_tries += 1;
+                    warn!("Failed to fetch courses for term '{term}' ({num_tries}/{MAX_NUM_REGISTER}); error received: '{e}'");
                     is_successful = false;
                     break;
                 }
