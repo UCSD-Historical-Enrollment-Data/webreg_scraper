@@ -1,6 +1,7 @@
 export interface IConfiguration {
     terms: string[];
     webhookUrls: WebhookUrl[];
+    apiKey?: string;
 }
 
 export interface WebhookUrl {
@@ -77,6 +78,7 @@ export async function tryExecuteAsync<T = void>(func: () => Promise<T | null>): 
     try {
         return await func();
     } catch (e) {
+        console.error(`[${getDateTime()}] An error occurred: ${e}`);
         return null;
     }
 }

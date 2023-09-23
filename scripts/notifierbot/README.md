@@ -38,7 +38,8 @@ To actually run this script, follow the directions below.
       "webhookUrls": [
          {"url": "", "peopleToPing": []},
          {"url": "", "peopleToPing": []}
-      ]
+      ],
+      "apiKey": ""
    }
    ``` 
 
@@ -49,6 +50,9 @@ To actually run this script, follow the directions below.
     - `webhookUrls` is an array of objects, where each object has two properties:
       - `url` is the webhook URL that was mentioned earlier.
       - `peopleToPing` is an array of Discord IDs that should be pinged when something goes wrong.
+    - `apiKey` is a string representing the authentication key to make API requests. This is _optional_ if and only if
+       the `auth` feature for `webreg` is not enabled (i.e., no authentication required). So, if you don't have
+       authentication, you can leave this value blank or remove this key, value pair.
 
     In the example above, there are two objects in the array associated with `webhookUrls`; in reality, you can have as
     many (or as little) webhooks as you want. An example configuration file might look like:
@@ -62,6 +66,9 @@ To actually run this script, follow the directions below.
         ]
     }
     ```
+   
+    It is assumed that the WebReg server is running on `localhost:3000`. If this is _not_ the case, you'll need to
+    manually make changes to the code.
 
 2. Next, install TypeScript globally:
     ```
@@ -85,3 +92,5 @@ To actually run this script, follow the directions below.
     ```
     node index.js
     ```
+   
+    Keep in mind that this script should be executed on the same server where the actual WebReg binary is being executed.
