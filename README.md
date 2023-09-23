@@ -19,6 +19,8 @@ on the crate name.
 | [`webreg`](https://github.com/ewang2002/webreg_scraper/tree/master/crates/webreg) | This is the actual scraper _and_ API application. |
 | [`authmanager`](https://github.com/ewang2002/webreg_scraper/tree/master/crates/authmanager) | A simple authentication manager for the API. |
 
+`webreg` is the main binary in this project. Therefore, the project version is based on `webreg`'s version.
+
 
 ## Scripts
 This repository contains two scripts, one of which is required for the scraper to work properly. To see more information 
