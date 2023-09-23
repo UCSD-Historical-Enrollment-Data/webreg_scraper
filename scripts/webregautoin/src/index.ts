@@ -83,7 +83,7 @@ async function main(): Promise<void> {
         if (req.url === "/cookie") {
             res.end(
                 JSON.stringify({
-                    cookie: await fetchCookies(context, browser)
+                    cookie: await fetchCookies(context, browser, false)
                 })
             );
         } else if (req.url === "/history") {
@@ -117,7 +117,7 @@ async function main(): Promise<void> {
     }
 
     // Initial warmup call.
-    await fetchCookies(context, browser);
+    await fetchCookies(context, browser, true);
 }
 
 main().then();
