@@ -31,5 +31,8 @@ about them, just click on the script name.
 
 This program _requires_ the `webregautoin` helper program.
 
+## Documentation
+Basic documentation is provided in the [wiki](https://github.com/ewang2002/webreg_scraper/wiki). 
+
 ## License
 Everything in this repository is licensed under the MIT license.
