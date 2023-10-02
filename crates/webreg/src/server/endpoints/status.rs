@@ -79,7 +79,7 @@ pub async fn get_login_script_stats(
                     "history" => "[]",
                     _ => "{}",
                 }
-                    .to_string()
+                .to_string()
             });
 
             // resp is a String, so if we were to just return Json(resp),
