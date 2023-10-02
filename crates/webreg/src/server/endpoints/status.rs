@@ -5,7 +5,7 @@ use axum::extract::{Path, State};
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use axum::Json;
-use serde_json::json;
+use serde_json::{json, Value};
 use tracing::log::info;
 
 use crate::types::WrapperState;
@@ -82,7 +82,19 @@ pub async fn get_login_script_stats(
                 .to_string()
             });
 
-            (StatusCode::OK, Json(resp)).into_response()
+            // resp is a String, so if we were to just return Json(resp),
+            // then we will end up with a string response even though we want
+            // to return a JSON object. So, convert to Value first and *then*
+            // return that as JSON.
+            match serde_json::from_str::<Value>(resp.as_str()) {
+                Ok(o) => (StatusCode::OK, Json(o)).into_response(),
+                Err(e) => {
+                    let err = json!({
+                        "error": e.to_string()
+                    });
+                    (StatusCode::INTERNAL_SERVER_ERROR, Json(err)).into_response()
+                }
+            }
         }
         Err(e) => {
             let json = json!({
