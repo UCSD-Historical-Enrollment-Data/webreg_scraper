@@ -11,7 +11,7 @@ import * as puppeteer from "puppeteer";
 import * as http from "http";
 import {parseArgs} from 'node:util';
 import {fetchCookies, getTermSeqId, logNice, printHelpMessage} from "./fns";
-import {IContext, ICredentials, ITermInfo} from "./types";
+import {IConfig, IContext, ICredentials, ITermInfo} from "./types";
 
 async function main(): Promise<void> {
     const args = parseArgs({
@@ -44,7 +44,7 @@ async function main(): Promise<void> {
         headless: !debug
     });
 
-    const credentials: ICredentials = JSON.parse(
+    const config: IConfig = JSON.parse(
         fs.readFileSync(path.join(__dirname, "..", "credentials.json")).toString());
 
     const term = args.values.term?.toUpperCase();
@@ -60,7 +60,7 @@ async function main(): Promise<void> {
     }
 
     const context: IContext = {
-        credentials,
+        config,
         session: {
             start: 0,
             callHistory: []

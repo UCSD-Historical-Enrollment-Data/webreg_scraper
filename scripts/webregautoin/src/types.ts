@@ -1,5 +1,5 @@
 export interface IContext {
-    credentials: ICredentials;
+    config: IConfig;
     termInfo: ITermInfo | null;
     session: ISession;
 }
@@ -15,6 +15,15 @@ export interface ISession {
      * here.
      */
     callHistory: number[];
+}
+
+export interface IConfig {
+    webreg: ICredentials;
+    settings: {
+        // Should be "sms" or "push"
+        loginType: string;
+        automaticPushEnabled: boolean;
+    };
 }
 
 export interface ICredentials {

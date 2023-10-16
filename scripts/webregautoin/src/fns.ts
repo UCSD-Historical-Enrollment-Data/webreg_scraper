@@ -104,8 +104,8 @@ export function waitFor(ms: number): Promise<void> {
  * - `"ERROR UNABLE TO AUTHENTICATE."`, if the script is unable to log into WebReg
  * after a certain number of tries.
  */
-export async function fetchCookies(config: IContext, browser: puppeteer.Browser, isInit: boolean): Promise<string> {
-    const termLog = config.termInfo?.termName ?? "ALL";
+export async function fetchCookies(ctx: IContext, browser: puppeteer.Browser, isInit: boolean): Promise<string> {
+    const termLog = ctx.termInfo?.termName ?? "ALL";
     logNice(termLog, "GetCookies function called.");
 
     let numFailedAttempts = 0;
@@ -146,8 +146,8 @@ export async function fetchCookies(config: IContext, browser: puppeteer.Browser,
         if (content.includes("Signing on Using:") && content.includes("TritonLink user name")) {
             logNice(termLog, "Attempting to sign in to TritonLink.");
             // https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_Selectors
-            await page.type('#ssousername', config.credentials.username);
-            await page.type('#ssopassword', config.credentials.password);
+            await page.type('#ssousername', ctx.config.webreg.username);
+            await page.type('#ssopassword', ctx.config.webreg.password);
             await page.click('button[type="submit"]');
         }
 
@@ -310,9 +310,9 @@ export async function fetchCookies(config: IContext, browser: puppeteer.Browser,
         logNice(termLog, "Logged into WebReg successfully.");
 
         let urlToFetch: string = "https://act.ucsd.edu/webreg2/svc/wradapter/get-term";
-        if (config.termInfo) {
-            const termName = config.termInfo.termName;
-            const termSelector = `${config.termInfo.seqId}:::${termName}`;
+        if (ctx.termInfo) {
+            const termName = ctx.termInfo.termName;
+            const termSelector = `${ctx.termInfo.seqId}:::${termName}`;
             await page.select("#startpage-select-term", termSelector);
             // Get cookies ready to load.
             await page.click('#startpage-button-go');
@@ -322,10 +322,10 @@ export async function fetchCookies(config: IContext, browser: puppeteer.Browser,
         const cookies = await page.cookies(urlToFetch);
         logNice(termLog, `Extracted cookies for term '${termLog}' and responding back with them.\n`);
 
-        if (config.session.start === 0) {
-            config.session.start = Date.now();
+        if (ctx.session.start === 0) {
+            ctx.session.start = Date.now();
         } else {
-            config.session.callHistory.push(Date.now());
+            ctx.session.callHistory.push(Date.now());
         }
 
         return cookies.map(x => `${x.name}=${x.value}`).join("; ");
