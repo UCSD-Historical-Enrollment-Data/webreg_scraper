@@ -1,5 +1,5 @@
 import * as puppeteer from "puppeteer";
-import {IContext} from "./types";
+import {IContext, WebRegLoginResult} from "./types";
 
 export const NUM_ATTEMPTS_BEFORE_EXIT: number = 6;
 const WEBREG_URL: string = "https://act.ucsd.edu/webreg2/start";
@@ -156,7 +156,7 @@ export async function fetchCookies(ctx: IContext, browser: puppeteer.Browser, is
 
 
         let loggedIn = false;
-        const r = await Promise.race([
+        const r: WebRegLoginResult = await Promise.race([
             // Either wait for the 'Go' button to show up, which implies that we
             // have an authenticated session, **OR** wait for the Duo frame
             // to show up.
@@ -173,9 +173,11 @@ export async function fetchCookies(ctx: IContext, browser: puppeteer.Browser, is
                     await page.waitForSelector("#startpage-button-go", {visible: true, timeout: 30 * 1000});
                 } catch (_) {
                     // conveniently ignore the error
-                    return 2;
+                    return WebRegLoginResult.UNKNOWN_ERROR;
                 }
-                return 0;
+
+                loggedIn = true;
+                return WebRegLoginResult.LOGGED_IN;
             })(),
             // Here, we *repeatedly* check to see if the Duo 2FA frame is visible AND some components of
             // the frame (in our case, the "Remember Me" checkbox) are visible.
@@ -211,12 +213,12 @@ export async function fetchCookies(ctx: IContext, browser: puppeteer.Browser, is
                 });
 
                 clearInterval(interval);
-                return 1;
+                return WebRegLoginResult.NEEDS_DUO;
             })()
         ]);
 
         // If we hit this, then we just try again.
-        if (r === 2) {
+        if (r === WebRegLoginResult.UNKNOWN_ERROR) {
             // If too many failed attempts, then notify the caller.
             // After all, we don't want to make too many Duo pushes and get
             // the AD account blocked by ITS :)
@@ -232,22 +234,17 @@ export async function fetchCookies(ctx: IContext, browser: puppeteer.Browser, is
 
         logNice(
             termLog,
-            r === 0
+            r === WebRegLoginResult.LOGGED_IN
                 ? "'Go' button found. No 2FA needed."
                 : "Duo 2FA frame found. Ignore the initial 2FA request; i.e., do not"
-                + " accept the 2FA request until you are told to do so."
+                    + " accept the 2FA request until you are told to do so."
         );
-
-        if (r === 0) {
-            loggedIn = true;
-        }
 
         // Wait an additional 4 seconds to make sure everything loads up.
         await waitFor(4 * 1000);
 
         // No go button means we need to log in.
-        // We could just check if (r === 1) though
-        if (!(await page.$("#startpage-button-go"))) {
+        if (r === WebRegLoginResult.NEEDS_DUO) {
             if (!isInit) {
                 logNice(termLog, "Attempting to send request to Duo, but this wasn't supposed to happen");
                 throw new Error("ruby is bad");
