@@ -1,8 +1,9 @@
-export interface IContext {
-    config: IConfig;
+export type Context = {
+    webreg: ICredentials;
     termInfo: ITermInfo | null;
     session: ISession;
-}
+    automaticPushEnabled: boolean;
+} & ({ loginType: "sms", tokens: string[] } | { loginType: "push" });
 
 export interface ISession {
     /**
@@ -23,6 +24,7 @@ export interface IConfig {
         // Should be "sms" or "push"
         loginType: string;
         automaticPushEnabled: boolean;
+        smsTokens?: string[];
     };
 }
 
