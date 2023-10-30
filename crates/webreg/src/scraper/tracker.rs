@@ -28,7 +28,7 @@ const MAX_NUM_REGISTER: usize = 25;
 /// The base delay when getting new session cookies. Note that, when attempting to get new
 /// session cookies, we want to use exponential backoff to ensure that if we can't get cookies
 /// the first time, we wait a bit longer before trying again.
-const BASE_DELAY_FOR_SESSION_COOKIE: f64 = 8.0;
+const BASE_DELAY_FOR_SESSION_COOKIE: f64 = 12.0;
 /// The general delay, i.e., the delay between making requests.
 const GENERAL_DELAY: u64 = 3;
 
@@ -284,11 +284,14 @@ async fn try_login(state: &Arc<WrapperState>) -> bool {
 
     let mut num_failures = 0;
     while num_failures <= MAX_NUM_LOGIN_FAILURES {
-        let delay_time = 1.2_f64.powi(num_failures) * BASE_DELAY_FOR_SESSION_COOKIE;
+        // "Exponential" backoff formula of f(x) = 1.1^x * 12
+        // delay_time represents the time we should wait before making another request in
+        // *minutes*, not *seconds*.
+        let delay_time = 1.1_f64.powi(num_failures) * BASE_DELAY_FOR_SESSION_COOKIE;
         info!(
-            "Waiting {delay_time} seconds before making request for new cookies ({num_failures}/{MAX_NUM_LOGIN_FAILURES})."
+            "Waiting {delay_time} minutes before making request for new cookies ({num_failures}/{MAX_NUM_LOGIN_FAILURES})."
         );
-        tokio::time::sleep(Duration::from_secs_f64(delay_time)).await;
+        tokio::time::sleep(Duration::from_secs_f64(delay_time * 60.0)).await;
 
         if state.should_stop() {
             warn!("Application state indicates that the process should stop, stopping.");
