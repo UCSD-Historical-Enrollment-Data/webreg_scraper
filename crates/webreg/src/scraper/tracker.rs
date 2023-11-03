@@ -377,6 +377,17 @@ async fn login_with_cookies(state: &Arc<WrapperState>, cookies: &str) -> bool {
         // are not empty for all terms.
         let mut is_successful = true;
         for term in state.all_terms.keys() {
+            // Try to associate this term in particular, it's possible that this term might not
+            // be on the list of all terms because it is hidden.
+            if let Err(e) = state.wrapper.associate_term(term).await {
+                num_tries += 1;
+                warn!(
+                    "An error occurred when trying to register term '{term}' ({num_tries}/{MAX_NUM_REGISTER}): '{e}'"
+                );
+                is_successful = false;
+                break;
+            }
+
             let all_courses = match state
                 .wrapper
                 .req(term)
