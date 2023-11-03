@@ -28,7 +28,7 @@ const MAX_NUM_REGISTER: usize = 25;
 /// The base delay when getting new session cookies. Note that, when attempting to get new
 /// session cookies, we want to use exponential backoff to ensure that if we can't get cookies
 /// the first time, we wait a bit longer before trying again.
-const BASE_DELAY_FOR_SESSION_COOKIE: f64 = 8.0;
+const BASE_DELAY_FOR_SESSION_COOKIE: f64 = 10.0;
 /// The general delay, i.e., the delay between making requests.
 const GENERAL_DELAY: u64 = 3;
 
@@ -39,7 +39,7 @@ const GENERAL_DELAY: u64 = 3;
 /// - `state`: The wrapper state.
 /// - `verbose`: Whether the logging should be verbose.
 pub async fn run_tracker(state: Arc<WrapperState>, verbose: bool) {
-    if !try_login(&state).await {
+    if !try_login(&state, true).await {
         error!("Initial login could not be completed, so the tracker will no longer run.");
         return;
     }
@@ -74,7 +74,7 @@ pub async fn run_tracker(state: Arc<WrapperState>, verbose: bool) {
         }
 
         // Attempt to login again.
-        if try_login(&state).await {
+        if try_login(&state, false).await {
             continue;
         }
 
@@ -271,11 +271,12 @@ async fn track_webreg_enrollment(
 ///
 /// # Parameters
 /// - `state`: The wrapper state.
+/// - `is_init`: Whether this is the initial login (i.e., first-time setup).
 ///
 /// # Returns
 /// `true` if the login process is successful, indicating that the wrapper is ready to
 /// make requests again. `false` otherwise.
-async fn try_login(state: &Arc<WrapperState>) -> bool {
+async fn try_login(state: &Arc<WrapperState>, is_init: bool) -> bool {
     info!("Attempting to get new WebReg session cookies.");
     let address = format!(
         "{}:{}",
@@ -284,11 +285,24 @@ async fn try_login(state: &Arc<WrapperState>) -> bool {
 
     let mut num_failures = 0;
     while num_failures <= MAX_NUM_LOGIN_FAILURES {
-        let delay_time = 1.2_f64.powi(num_failures) * BASE_DELAY_FOR_SESSION_COOKIE;
-        info!(
-            "Waiting {delay_time} seconds before making request for new cookies ({num_failures}/{MAX_NUM_LOGIN_FAILURES})."
-        );
-        tokio::time::sleep(Duration::from_secs_f64(delay_time)).await;
+        if is_init {
+            // If this is the initial login, then we can just wait (3 * number of failure) minutes
+            if num_failures != 0 {
+                info!(
+                    "Waiting 3 minutes before making request for new cookies ({num_failures}/{MAX_NUM_LOGIN_FAILURES})."
+                );
+                tokio::time::sleep(Duration::from_secs(3 * 60)).await;
+            }
+        } else {
+            // "Exponential" backoff formula of f(x) = 1.1^x * 10 minutes
+            // delay_time represents the time we should wait before making another request in
+            // *minutes*, not *seconds*.
+            let delay_time = 1.1_f64.powi(num_failures) * BASE_DELAY_FOR_SESSION_COOKIE;
+            info!(
+                "Waiting {delay_time} minutes before making request for new cookies ({num_failures}/{MAX_NUM_LOGIN_FAILURES})."
+            );
+            tokio::time::sleep(Duration::from_secs_f64(delay_time * 60.0)).await;
+        }
 
         if state.should_stop() {
             warn!("Application state indicates that the process should stop, stopping.");
@@ -374,6 +388,21 @@ async fn login_with_cookies(state: &Arc<WrapperState>, cookies: &str) -> bool {
         // are not empty for all terms.
         let mut is_successful = true;
         for term in state.all_terms.keys() {
+            // Wait a few seconds before looping.
+            tokio::time::sleep(Duration::from_secs(GENERAL_DELAY)).await;
+            // Try to associate this term in particular, it's possible that this term might not
+            // be on the list of all terms because it is hidden.
+            if let Err(e) = state.wrapper.associate_term(term).await {
+                num_tries += 1;
+                warn!(
+                    "An error occurred when trying to register term '{term}' ({num_tries}/{MAX_NUM_REGISTER}): '{e}'"
+                );
+                is_successful = false;
+                break;
+            }
+
+            // Wait a few seconds before making another request.
+            tokio::time::sleep(Duration::from_secs(GENERAL_DELAY)).await;
             let all_courses = match state
                 .wrapper
                 .req(term)
