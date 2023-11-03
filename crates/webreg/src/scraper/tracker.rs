@@ -388,6 +388,8 @@ async fn login_with_cookies(state: &Arc<WrapperState>, cookies: &str) -> bool {
         // are not empty for all terms.
         let mut is_successful = true;
         for term in state.all_terms.keys() {
+            // Wait a few seconds before looping.
+            tokio::time::sleep(Duration::from_secs(GENERAL_DELAY)).await;
             // Try to associate this term in particular, it's possible that this term might not
             // be on the list of all terms because it is hidden.
             if let Err(e) = state.wrapper.associate_term(term).await {
@@ -399,6 +401,8 @@ async fn login_with_cookies(state: &Arc<WrapperState>, cookies: &str) -> bool {
                 break;
             }
 
+            // Wait a few seconds before making another request.
+            tokio::time::sleep(Duration::from_secs(GENERAL_DELAY)).await;
             let all_courses = match state
                 .wrapper
                 .req(term)
