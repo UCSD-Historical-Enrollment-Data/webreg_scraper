@@ -11,6 +11,22 @@ the new cookies. In the initial setup process, the headless Chrome browser will 
 credentials and then automatically select the `Remember me for 7 days` checkbox when performing Duo authentication. 
 That way, you don't need to worry about having to authenticate via Duo for the next 7 days.
 
+## Authentication Modes
+As of recently, this script supports either Push or SMS mode. The modes only really matter at the beginning (i.e., when
+you start the script).
+- Push mode essentially means that, when the script is starting up, the script will initially authenticate you using 
+  Duo Push.
+- SMS mode means that, when the script is starting up, the script will initially use the SMS code that best fits the 
+  hint that is given (i.e., it will try to find the code you defined in the configuration file that satisfies the hint
+  "Your next SMS Passcode starts with XXX"). 
+
+Push mode is probably the easiest to use short-term, but you'll need to restart the login script setup process every
+6-7 days to ensure you can still keep yourself logged in. SMS mode is somewhat easy, and allows you to remember your
+session for up to 70 days (10 codes times 7 days per code = 70 days). However, you probably won't be able to use SMS
+mode _outside_ of this application.
+
+As a warning, SMS mode is not guaranteed to work as expected. Duo Push remains the most stable login process. 
+
 ## Requirements
 In order to ensure that you _can_ use this script, ensure that the following technical and non-technical requirements
 are satisfied.
@@ -32,10 +48,11 @@ are satisfied.
 ## Setup
 To actually run this script, follow the directions below.
 
-1. A sample configuration file has been provided for you; this file is called `credentials.example.json`.
+1. Two sample configuration files have been provided for you: `credentials.sample_push.json` and `credentials.sample_sms.json`.
     1. Rename this file to `credentials.json`.
     2. Open the file and fill in your UC San Diego Active Directory username and password.
-    3. Save your changes.
+    3. Modify any other relevant settings (see the next section on the configuration file for more on this).
+    4. Save your changes.
 
 2. Next, install TypeScript globally:
     ```
@@ -67,4 +84,59 @@ To actually run this script, follow the directions below.
     complete, then the script is ready to serve future login requests.
 
 > **Warning:**
-> You'll need to repeat this process every 6-7 days to ensure your scraper runs uninterrupted.
+> If you use `push` mode, you'll need to repeat this process every 6-7 days to ensure your scraper runs uninterrupted.
+> 
+> If you use `sms` mode, you'll need to repeat this process every 70 days or so, but you must not use SMS mode outside
+> of this program. In other words, if you use `sms` mode for this application, do not use Duo SMS outside of this app.
+
+## Configuration File Layout
+There are two sample configuration files you can use; each of them correspond to the type of login process you can use
+for this login script.
+
+Both configuration layouts will feature the same keys:
+- `webreg.username` (`string`): Your UCSD Active Directory username.
+- `webreg.password` (`string`): Your UCSD Active Directory password.
+- `settings.loginType` (`sms` or `push`): The login process you want to use. This can only be `sms` or `push`.
+- `settings.automaticPushEnabled` (`boolean`): Whether your account is configured to automatically sends a Duo Push on 
+  login. If this value is `true`, then the login script will cancel the automatic push when setting itself up. 
+
+### Duo Push
+```json
+{
+    "webreg": {
+        "username": "",
+        "password": ""
+    },
+    "settings": {
+        "loginType": "push",
+        "automaticPushEnabled": true
+    }
+}
+```
+
+### Duo SMS
+```json
+{
+    "webreg": {
+        "username": "",
+        "password": ""
+    },
+    "settings": {
+        "loginType": "push",
+        "automaticPushEnabled": true,
+        "smsTokens": [
+            "your",
+            "sms",
+            "tokens",
+            "as",
+            "strings"
+        ]
+    }
+}
+```
+
+Additionally, Duo SMS configuration files have a third settings property:
+- `settings.smsTokens` (`string[]`): a list of SMS tokens that Duo sent you. To obtain these tokens, log into your UCSD
+  account. When you reach the Duo 2FA screen, select "Enter a Passcode" and then click on "Text me new codes." You should
+  receive the tokens via text. When you do, just put the tokens into `settings.smsTokens`, ensuring that each element is
+  of type _string_ (**not** an integer).
