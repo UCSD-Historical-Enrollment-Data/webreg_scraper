@@ -1,6 +1,6 @@
 {
   "name": "notifierbot",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Automatically sends a message when the scraper is offline.",
   "main": "index.js",
   "scripts": {

@@ -1,5 +1,8 @@
 import * as puppeteer from "puppeteer";
-import {IContext} from "./types";
+import {Context, WebRegLoginResult} from "./types";
+
+export const SMS = "sms";
+export const PUSH = "push";
 
 export const NUM_ATTEMPTS_BEFORE_EXIT: number = 6;
 const WEBREG_URL: string = "https://act.ucsd.edu/webreg2/start";
@@ -104,8 +107,8 @@ export function waitFor(ms: number): Promise<void> {
  * - `"ERROR UNABLE TO AUTHENTICATE."`, if the script is unable to log into WebReg
  * after a certain number of tries.
  */
-export async function fetchCookies(config: IContext, browser: puppeteer.Browser, isInit: boolean): Promise<string> {
-    const termLog = config.termInfo?.termName ?? "ALL";
+export async function fetchCookies(ctx: Context, browser: puppeteer.Browser, isInit: boolean): Promise<string> {
+    const termLog = ctx.termInfo?.termName ?? "ALL";
     logNice(termLog, "GetCookies function called.");
 
     let numFailedAttempts = 0;
@@ -146,8 +149,8 @@ export async function fetchCookies(config: IContext, browser: puppeteer.Browser,
         if (content.includes("Signing on Using:") && content.includes("TritonLink user name")) {
             logNice(termLog, "Attempting to sign in to TritonLink.");
             // https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_Selectors
-            await page.type('#ssousername', config.credentials.username);
-            await page.type('#ssopassword', config.credentials.password);
+            await page.type('#ssousername', ctx.webreg.username);
+            await page.type('#ssopassword', ctx.webreg.password);
             await page.click('button[type="submit"]');
         }
 
@@ -156,7 +159,7 @@ export async function fetchCookies(config: IContext, browser: puppeteer.Browser,
 
 
         let loggedIn = false;
-        const r = await Promise.race([
+        const r: WebRegLoginResult = await Promise.race([
             // Either wait for the 'Go' button to show up, which implies that we
             // have an authenticated session, **OR** wait for the Duo frame
             // to show up.
@@ -173,9 +176,11 @@ export async function fetchCookies(config: IContext, browser: puppeteer.Browser,
                     await page.waitForSelector("#startpage-button-go", {visible: true, timeout: 30 * 1000});
                 } catch (_) {
                     // conveniently ignore the error
-                    return 2;
+                    return WebRegLoginResult.UNKNOWN_ERROR;
                 }
-                return 0;
+
+                loggedIn = true;
+                return WebRegLoginResult.LOGGED_IN;
             })(),
             // Here, we *repeatedly* check to see if the Duo 2FA frame is visible AND some components of
             // the frame (in our case, the "Remember Me" checkbox) are visible.
@@ -211,12 +216,12 @@ export async function fetchCookies(config: IContext, browser: puppeteer.Browser,
                 });
 
                 clearInterval(interval);
-                return 1;
+                return WebRegLoginResult.NEEDS_DUO;
             })()
         ]);
 
         // If we hit this, then we just try again.
-        if (r === 2) {
+        if (r === WebRegLoginResult.UNKNOWN_ERROR) {
             // If too many failed attempts, then notify the caller.
             // After all, we don't want to make too many Duo pushes and get
             // the AD account blocked by ITS :)
@@ -232,23 +237,18 @@ export async function fetchCookies(config: IContext, browser: puppeteer.Browser,
 
         logNice(
             termLog,
-            r === 0
+            r === WebRegLoginResult.LOGGED_IN
                 ? "'Go' button found. No 2FA needed."
                 : "Duo 2FA frame found. Ignore the initial 2FA request; i.e., do not"
-                + " accept the 2FA request until you are told to do so."
+                    + " accept the 2FA request until you are told to do so."
         );
-
-        if (r === 0) {
-            loggedIn = true;
-        }
 
         // Wait an additional 4 seconds to make sure everything loads up.
         await waitFor(4 * 1000);
 
         // No go button means we need to log in.
-        // We could just check if (r === 1) though
-        if (!(await page.$("#startpage-button-go"))) {
-            if (!isInit) {
+        if (r === WebRegLoginResult.NEEDS_DUO) {
+            if (!isInit && ctx.loginType === PUSH) {
                 logNice(termLog, "Attempting to send request to Duo, but this wasn't supposed to happen");
                 throw new Error("ruby is bad");
             }
@@ -259,23 +259,25 @@ export async function fetchCookies(config: IContext, browser: puppeteer.Browser,
             if (!possDuoFrame) {
                 logNice(termLog, "No possible Duo frame found. Returning empty string.");
                 console.info();
-                return "";
+                throw new Error();
             }
 
             const duoFrame = await possDuoFrame.contentFrame();
             if (!duoFrame) {
                 logNice(termLog, "Duo frame not attached. Returning empty string.");
                 console.info();
-                return "";
+                throw new Error();
             }
 
-            // it's possible that we might need to cancel our existing authentication request,
-            // especially if we have duo push automatically send upon logging in
-            await waitFor(1000);
-            const cancelButton = await duoFrame.$(".btn-cancel");
-            if (cancelButton) {
-                await cancelButton.click();
-                logNice(termLog, "Clicked the CANCEL button to cancel initial 2FA request. Do not respond to 2FA request.");
+            if (ctx.automaticPushEnabled) {
+                // it's possible that we might need to cancel our existing authentication request,
+                // especially if we have duo push automatically send upon logging in
+                await waitFor(1000);
+                const cancelButton = await duoFrame.$(".btn-cancel");
+                if (cancelButton) {
+                    await cancelButton.click();
+                    logNice(termLog, "Clicked the CANCEL button to cancel initial 2FA request. Do not respond to 2FA request.");
+                }
             }
 
             await waitFor(1000);
@@ -283,9 +285,73 @@ export async function fetchCookies(config: IContext, browser: puppeteer.Browser,
             await duoFrame.click('#remember_me_label_text');
             logNice(termLog, "Checked the 'Remember me for 7 days' box.");
             await waitFor(1000);
-            // Send me a push
-            await duoFrame.click('#auth_methods > fieldset > div.row-label.push-label > button');
-            logNice(termLog, "A Duo push was sent. Please respond to the new 2FA request.");
+
+            if (ctx.loginType === SMS) {
+                // Click on the 'enter a passcode' button
+                await duoFrame.click("#passcode");
+                await waitFor(1500);
+                const smsCodeHint = await duoFrame.$("#auth_methods > fieldset > div.passcode-label.row-label > div > div");
+                if (!smsCodeHint) {
+                    logNice(termLog, "No SMS code hint found. That might be a problem.");
+                    console.info();
+                    throw new Error();
+                }
+
+                const smsPasscodeHint = await smsCodeHint.evaluate(elem => elem.textContent);
+                if (!smsPasscodeHint || !smsPasscodeHint.startsWith("Your next SMS Passcode starts with")) {
+                    logNice(termLog, "SMS code hint element found, but no text found or bad (ruby) text found.");
+                    console.info();
+                    throw new Error();
+                }
+
+                logNice(termLog, `Found SMS passcode hint '${smsPasscodeHint}'`);
+                const hint = smsPasscodeHint.split(" ").at(-1)!;
+                const codeToUse = ctx.tokens.find(token => token.startsWith(hint));
+                if (!codeToUse) {
+                    logNice(termLog, `No SMS code could not be found that satisfies the hint ('${smsPasscodeHint}')`);
+                    console.info();
+                    throw new Error();
+                }
+
+                logNice(termLog, `Code should start with number '${hint}'. Using code '${codeToUse}'`);
+                await waitFor(1500);
+                // Put the SMS code into the text box
+                const smsTextBox = await duoFrame.$("#auth_methods > fieldset > div.passcode-label.row-label > div > input");
+                if (!smsTextBox) {
+                    logNice(termLog, "Could not find the SMS text box to put your SMS token in.");
+                    console.info();
+                    throw new Error();
+                }
+
+                await smsTextBox.type(codeToUse.toString());
+                await waitFor(1500);
+
+                // Then, press the "Log In" button
+                await duoFrame.click("#passcode");
+                logNice(termLog, `Entered SMS code '${codeToUse}' and clicked the 'Log In' button.`);
+                await waitFor(1500);
+
+                try {
+                    // See if we used an incorrect code.
+                    // 
+                    // NOTE: If we have the correct code, then the frame will no longer exist, so a try/catch
+                    // is used to ensure that possibility happens.
+                    const frameContent = await duoFrame.content();
+                    if (frameContent.includes("Incorrect passcode. Enter a passcode from Duo Mobile or a text.")) {
+                        logNice(termLog, "The passcode is incorrect. This is so sad.");
+                        console.info();
+                        throw new Error();
+                    }
+                }
+                catch (_) {
+                    // conveniently ignore this error, too
+                }
+            }
+            else {
+                // Send me a push
+                await duoFrame.click('#auth_methods > fieldset > div.row-label.push-label > button');
+                logNice(termLog, "A Duo push was sent. Please respond to the new 2FA request.");
+            }
         }
 
         try {
@@ -310,9 +376,9 @@ export async function fetchCookies(config: IContext, browser: puppeteer.Browser,
         logNice(termLog, "Logged into WebReg successfully.");
 
         let urlToFetch: string = "https://act.ucsd.edu/webreg2/svc/wradapter/get-term";
-        if (config.termInfo) {
-            const termName = config.termInfo.termName;
-            const termSelector = `${config.termInfo.seqId}:::${termName}`;
+        if (ctx.termInfo) {
+            const termName = ctx.termInfo.termName;
+            const termSelector = `${ctx.termInfo.seqId}:::${termName}`;
             await page.select("#startpage-select-term", termSelector);
             // Get cookies ready to load.
             await page.click('#startpage-button-go');
@@ -322,10 +388,10 @@ export async function fetchCookies(config: IContext, browser: puppeteer.Browser,
         const cookies = await page.cookies(urlToFetch);
         logNice(termLog, `Extracted cookies for term '${termLog}' and responding back with them.\n`);
 
-        if (config.session.start === 0) {
-            config.session.start = Date.now();
+        if (ctx.session.start === 0) {
+            ctx.session.start = Date.now();
         } else {
-            config.session.callHistory.push(Date.now());
+            ctx.session.callHistory.push(Date.now());
         }
 
         return cookies.map(x => `${x.name}=${x.value}`).join("; ");

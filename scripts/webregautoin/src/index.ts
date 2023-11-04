@@ -9,9 +9,9 @@ import * as fs from "fs";
 import * as path from "path";
 import * as puppeteer from "puppeteer";
 import * as http from "http";
-import {parseArgs} from 'node:util';
-import {fetchCookies, getTermSeqId, logNice, printHelpMessage} from "./fns";
-import {IContext, ICredentials, ITermInfo} from "./types";
+import { parseArgs } from 'node:util';
+import { PUSH, SMS, fetchCookies, getTermSeqId, logNice, printHelpMessage } from "./fns";
+import { IConfig, Context, ICredentials, ITermInfo } from "./types";
 
 async function main(): Promise<void> {
     const args = parseArgs({
@@ -44,7 +44,7 @@ async function main(): Promise<void> {
         headless: !debug
     });
 
-    const credentials: ICredentials = JSON.parse(
+    const config: IConfig = JSON.parse(
         fs.readFileSync(path.join(__dirname, "..", "credentials.json")).toString());
 
     const term = args.values.term?.toUpperCase();
@@ -59,14 +59,41 @@ async function main(): Promise<void> {
         }
     }
 
-    const context: IContext = {
-        credentials,
-        session: {
-            start: 0,
-            callHistory: []
-        },
-        termInfo
-    };
+    let context: Context;
+    if (config.settings.loginType === SMS) {
+        if (!config.settings.smsTokens || config.settings.smsTokens.length === 0) {
+            console.error("If your login type is 'sms' then you must provide SMS tokens.");
+            process.exit(1);
+        }
+
+        context = {
+            webreg: config.webreg,
+            session: {
+                start: 0,
+                callHistory: []
+            },
+            termInfo,
+            automaticPushEnabled: config.settings.automaticPushEnabled,
+            loginType: SMS,
+            tokens: config.settings.smsTokens
+        };
+    }
+    else if (config.settings.loginType === PUSH) {
+        context = {
+            webreg: config.webreg,
+            session: {
+                start: 0,
+                callHistory: []
+            },
+            termInfo,
+            automaticPushEnabled: config.settings.automaticPushEnabled,
+            loginType: PUSH
+        };
+    }
+    else {
+        console.error("Your login type must either be 'sms' or 'push'");
+        process.exit(1);
+    }
 
     // Very basic server.
     const server = http.createServer(async (req, res) => {
