@@ -1,8 +1,6 @@
 use std::sync::Arc;
 
-use crate::server::types::{
-    ApiErrorType, BodySearchType, CourseQueryStr, RawParsedApiResp, RawQueryStr,
-};
+use crate::server::types::{ApiErrorType, BodySearchType, CourseQueryStr, RawParsedApiResp, RawQueryStr, SubjListQueryStr};
 use crate::types::WrapperState;
 use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
@@ -129,6 +127,48 @@ pub async fn get_department_codes(
         .req(term.as_str())
         .parsed()
         .get_department_codes()
+        .await;
+
+    match req {
+        Ok(o) => (StatusCode::OK, Json(o)).into_response(),
+        Err(e) => ApiErrorType::from(e).into_response(),
+    }
+}
+
+/// A function which should be called when the `course_text` endpoint is called.
+#[tracing::instrument(level = "info", skip(s))]
+pub async fn get_course_text(
+    Path(term): Path<String>,
+    Query(q): Query<SubjListQueryStr>,
+    State(s): State<Arc<WrapperState>>,
+) -> Response {
+    info!("GET endpoint `course_text` called");
+    let req = s
+        .wrapper
+        .req(term.as_str())
+        .parsed()
+        .get_course_notes(&q.subjects.split(':').collect::<Vec<_>>())
+        .await;
+
+    match req {
+        Ok(o) => (StatusCode::OK, Json(o)).into_response(),
+        Err(e) => ApiErrorType::from(e).into_response(),
+    }
+}
+
+/// A function which should be called when the `section_text` endpoint is called.
+#[tracing::instrument(level = "info", skip(s))]
+pub async fn get_section_text(
+    Path(term): Path<String>,
+    Query(crsc): Query<CourseQueryStr>,
+    State(s): State<Arc<WrapperState>>,
+) -> Response {
+    info!("GET endpoint `section_text` called");
+    let req = s
+        .wrapper
+        .req(term.as_str())
+        .parsed()
+        .get_section_notes_by_course(crsc.subject, crsc.number)
         .await;
 
     match req {

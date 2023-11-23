@@ -81,6 +81,13 @@ pub struct CourseQueryStr {
     pub number: String,
 }
 
+/// A structure meant for a query string, intended to have the user provide a "list" of
+/// subject code (e.g., CSE)
+#[derive(Deserialize, Debug)]
+pub struct SubjListQueryStr {
+    pub subjects: String,
+}
+
 /// A structure meant for a query string, intended to give users the ability to control
 /// the type of response they wanted.
 #[derive(Deserialize, Debug)]

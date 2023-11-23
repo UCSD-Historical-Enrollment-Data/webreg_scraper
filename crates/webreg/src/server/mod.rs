@@ -51,6 +51,8 @@ pub fn create_router(app_state: Arc<WrapperState>) -> Router {
         .route("/search", get(ww_general::get_search_courses))
         .route("/department_codes", get(ww_general::get_department_codes))
         .route("/subject_codes", get(ww_general::get_subject_codes))
+        .route("/course_text", get(ww_general::get_course_text))
+        .route("/section_text", get(ww_general::get_section_text))
         .merge(cookie_router)
         .layer(mw::from_fn_with_state(
             app_state.clone(),
