@@ -1,6 +1,8 @@
 use std::sync::Arc;
 
-use crate::server::types::{ApiErrorType, BodySearchType, CourseQueryStr, RawParsedApiResp, RawQueryStr, SubjListQueryStr};
+use crate::server::types::{
+    ApiErrorType, BodySearchType, CourseQueryStr, RawParsedApiResp, RawQueryStr, SubjListQueryStr,
+};
 use crate::types::WrapperState;
 use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
