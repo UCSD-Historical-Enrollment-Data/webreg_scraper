@@ -39,10 +39,7 @@ pub fn create_router(app_state: Arc<WrapperState>) -> Router {
         .route("/register_term", post(ww_cookies::post_register_term))
         .route("/events", get(ww_cookies::get_events))
         .route("/rename_schedule", post(ww_cookies::post_rename_schedule))
-        .layer(mw::from_fn_with_state(
-            app_state.clone(),
-            cookie_validator::check_cookies,
-        ));
+        .layer(mw::from_fn(cookie_validator::check_cookies));
 
     // General router
     let parsed_router = Router::new()
@@ -51,6 +48,8 @@ pub fn create_router(app_state: Arc<WrapperState>) -> Router {
         .route("/search", get(ww_general::get_search_courses))
         .route("/department_codes", get(ww_general::get_department_codes))
         .route("/subject_codes", get(ww_general::get_subject_codes))
+        .route("/course_text", get(ww_general::get_course_text))
+        .route("/section_text", get(ww_general::get_section_text))
         .merge(cookie_router)
         .layer(mw::from_fn_with_state(
             app_state.clone(),
