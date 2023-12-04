@@ -5,7 +5,7 @@ use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use axum::Json;
 use serde::{Deserialize, Serialize};
-use serde_json::json;
+use serde_json::{json, Value};
 use webweg::types::{SectionIdNotFoundContext, WrapperError};
 use webweg::wrapper::input_types::{
     CourseLevelFilter, DayOfWeek, SearchRequestBuilder, SearchType,
@@ -199,9 +199,26 @@ where
         match self {
             RawParsedApiResp::Parsed(Err(e)) | RawParsedApiResp::Raw(Err(e)) => {
                 ApiErrorType::from(e).into_response()
-            }
-            RawParsedApiResp::Raw(Ok(o)) => (StatusCode::OK, o).into_response(),
+            },
             RawParsedApiResp::Parsed(Ok(o)) => (StatusCode::OK, Json(o)).into_response(),
+            RawParsedApiResp::Raw(Ok(o)) => {
+                let json = serde_json::from_str::<Value>(o.as_str());
+                // Note: if we just returned Json(o) where o is of type String, then the response
+                // will literally just be a giant string containing the JSON object. Users probably
+                // expect to get the actual JSON structure itself, not the structure in a string.
+                // So, we need to deserialize the JSON string to a JSON object and then return the
+                // object.
+                //
+                // Two cases here: if we have a valid JSON structure from WebReg, we can
+                // return the raw response as a JSON structure.
+                //
+                // If we do not have a valid JSON structure, then we can just return the original
+                // string as is.
+                match json {
+                    Ok(o) => (StatusCode::OK, Json(o)).into_response(),
+                    Err(_) => (StatusCode::OK, o).into_response()
+                }
+            },
         }
     }
 }
