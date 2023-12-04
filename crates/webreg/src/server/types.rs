@@ -199,7 +199,7 @@ where
         match self {
             RawParsedApiResp::Parsed(Err(e)) | RawParsedApiResp::Raw(Err(e)) => {
                 ApiErrorType::from(e).into_response()
-            },
+            }
             RawParsedApiResp::Parsed(Ok(o)) => (StatusCode::OK, Json(o)).into_response(),
             RawParsedApiResp::Raw(Ok(o)) => {
                 let json = serde_json::from_str::<Value>(o.as_str());
@@ -216,9 +216,9 @@ where
                 // string as is.
                 match json {
                     Ok(o) => (StatusCode::OK, Json(o)).into_response(),
-                    Err(_) => (StatusCode::OK, o).into_response()
+                    Err(_) => (StatusCode::OK, o).into_response(),
                 }
-            },
+            }
         }
     }
 }
