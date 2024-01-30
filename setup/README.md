@@ -1,5 +1,8 @@
 # Setup Environment
-If you have a new _Ubuntu_ environment, you can use the `setup.sh` script to install all necessary files and dependencies needed to run this project. Other Linux distributions have not been tested.
+You can use the `setup.sh` script to install all necessary files and dependencies needed to run this project. At this time, the script has been tested and works on Ubuntu OS version 23.10.
+
+> [!WARNING]
+> Other Linux distributions have not been tested. You may need to adjust the script to work as expected.
 
 I recommend creating a [DigitalOcean droplet](https://www.digitalocean.com/); the cheapest plan will suffice, and students with the GitHub student pack are eligible for [$200 in DigitalOcean credits for 1 year](https://education.github.com/pack/offers). 
 
