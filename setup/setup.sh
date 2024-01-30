@@ -5,8 +5,6 @@ if [ "$(id -u)" -ne 0 ]; then
 	exit 1; 
 fi
 
-apt-get update
-
 # Set the timezone to Pacific time
 timedatectl set-timezone America/Los_Angeles
 
