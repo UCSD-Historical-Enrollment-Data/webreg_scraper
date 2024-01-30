@@ -6,7 +6,7 @@ You can use the `setup.sh` script to install all necessary files and dependencie
 
 I recommend creating a [DigitalOcean droplet](https://www.digitalocean.com/); the cheapest plan will suffice, and students with the GitHub student pack are eligible for [$200 in DigitalOcean credits for 1 year](https://education.github.com/pack/offers). 
 
-To start, copy both `setup.sh` and `nginx.conf` to the directory where you want all necessary project files to be stored at (e.g., your home directory, `~`). Then, run `sudo setup.sh`. This script will
+To start, copy both `setup.sh` and `nginx.conf` to the directory where you want all necessary project files to be stored at (e.g., your home directory, `~`). Then, update your system if needed (e.g., using `apt-get update`). Afterwards, run `sudo setup.sh`. This script will
 - Set the timezone to Pacific Time
 - Install all dependencies needed for puppeteer to work
 - Install `nvm` and the LTS version of `node.js`
