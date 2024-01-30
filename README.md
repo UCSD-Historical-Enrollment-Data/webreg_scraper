@@ -33,8 +33,10 @@ about them, just click on the script name.
 
 This program _requires_ the `webregautoin` helper program.
 
-## Documentation
-Basic documentation is provided in the [wiki](https://github.com/ewang2002/webreg_scraper/wiki). 
+## Setup
+To run this project, feel free to explore the individual scripts or crates above; setup guides for each are provided.
+
+If you want to get an Ubuntu environment ready with all the necessary files needed to run this project, you can run the setup script in the [`setup`](https://github.com/ewang2002/webreg_scraper/tree/master/setup) folder. More information will be provided there.
 
 ## License
 Everything in this repository is licensed under the MIT license.
