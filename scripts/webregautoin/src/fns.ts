@@ -146,7 +146,7 @@ export async function fetchCookies(ctx: Context, browser: puppeteer.Browser, isI
         await waitFor(3000);
         const content = await page.content();
         // This assumes that the credentials are valid.
-        if (content.includes("Signing on Using:") && content.includes("TritonLink user name")) {
+        if (content.includes("Signing on using:") && content.includes("TritonLink user name")) {
             logNice(termLog, "Attempting to sign in to TritonLink.");
             // https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_Selectors
             await page.type('#ssousername', ctx.webreg.username);
