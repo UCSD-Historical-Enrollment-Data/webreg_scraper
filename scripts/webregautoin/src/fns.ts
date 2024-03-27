@@ -153,18 +153,18 @@ export async function fetchCookies(ctx: Context, browser: puppeteer.Browser, isI
             await page.click('button[type="submit"]');
         }
 
-        // Wait for either Duo 2FA frame (if we need 2FA) or "Go" button (if no 2FA needed) to show up
-        logNice(termLog, "Waiting for Duo 2FA frame or 'Go' button to show up.");
+        // Wait for either Duo 2FA prompt (if we need 2FA) or "Go" button (if no 2FA needed) to show up
+        logNice(termLog, "Waiting for Duo 2FA prompt or 'Go' button to show up.");
 
         let loggedIn = false;
         const r: WebRegLoginResult = await Promise.race([
             // Either wait for the 'Go' button to show up, which implies that we
-            // have an authenticated session, **OR** wait for the Duo frame
+            // have an authenticated session, **OR** wait for the Duo prompt
             // to show up.
             //
             // If an error occurred, it means the 'Go' button could not be found
-            // after 30 seconds. This implies that the Duo frame could not be
-            // found since *if* the Duo frame did show up, then the error would
+            // after 30 seconds. This implies that the Duo prompt could not be
+            // found since *if* the Duo prompt did show up, then the error would
             // have never occurred.
 
             // Here, we wait for the 'Go' button (to load WebReg for a term) to
@@ -180,8 +180,8 @@ export async function fetchCookies(ctx: Context, browser: puppeteer.Browser, isI
                 loggedIn = true;
                 return WebRegLoginResult.LOGGED_IN;
             })(),
-            // Here, we *repeatedly* check to see if the Duo 2FA frame is visible AND some components of
-            // the frame (in our case, the "Remember Me" checkbox) are visible.
+            // Here, we *repeatedly* check to see if the Duo 2FA prompt is visible AND some components of
+            // the prompt (in our case, the "Other Option" button) are visible.
             (async () => {
                 const interval = await new Promise<NodeJS.Timeout>(r => {
                     const internalInterval = setInterval(async () => {
@@ -192,12 +192,13 @@ export async function fetchCookies(ctx: Context, browser: puppeteer.Browser, isI
                                 return;
                             }
 
-                            const duoDiv = await page.$("#header-text");
-                            if (!duoDiv) {
+                            // Check if the header text is visible (Check for a Duo Push)
+                            const duoPrompt = await page.$("#header-text");
+                            if (!duoPrompt) {
                                 return;
                             }
 
-                            // "Other Options" selector
+                            // "Other Options" selector - is it visible?
                             if (!(await page.$("#auth-view-wrapper > div:nth-child(2) > div.row.display-flex.other-options-link.align-flex-justify-content-center.size-margin-bottom-large.size-margin-top-small > a"))) {
                                 return;
                             }
@@ -229,53 +230,53 @@ export async function fetchCookies(ctx: Context, browser: puppeteer.Browser, isI
             continue;
         }
 
-        logNice(
-            termLog,
-            r === WebRegLoginResult.LOGGED_IN
-                ? "'Go' button found. No 2FA needed."
-                : "Duo 2FA frame found. Ignore the initial 2FA request; i.e., do not"
-                    + " accept the 2FA request until you are told to do so."
-        );
-
-        // Wait an additional 4 seconds to make sure everything loads up.
-        await waitFor(4 * 1000);
-
         // No go button means we need to log in.
         if (r === WebRegLoginResult.NEEDS_DUO) {
+            logNice(termLog, "Duo 2FA prompt required.");
+
+            // If we have already initialized this and we are asked to do a Duo 2FA prompt, then
+            // cancel.
             if (!isInit && ctx.loginType === PUSH) {
                 logNice(termLog, "Attempting to send request to Duo, but this wasn't supposed to happen");
                 throw new Error("ruby is bad");
             }
 
-            logNice(termLog, "Beginning Duo 2FA process. Do not accept yet.");
-            // Need to find the duo div ("Check for a Duo Push") so we can actually authenticate
-            const duoDiv = await page.$("#header-text");
-            if (!duoDiv) {
-                logNice(termLog, "No possible Duo div found. Returning empty string.");
+            logNice(termLog, "Accept the Duo 2FA prompt when you receive it. You may need to open the app.");
+            // Need to find the Duo prompt ("Check for a Duo Push") so we can actually authenticate
+            const duoPrompt = await page.$("#header-text");
+            if (!duoPrompt) {
+                logNice(termLog, "No possible Duo prompt found. Returning empty string.");
                 console.info();
                 throw new Error();
             }
 
-            await waitFor(1000);
-            logNice(termLog, "A Duo push was sent. Please respond to the new 2FA request.");
-
-            // Once the Duo push is approved...
+            logNice(termLog, "Waiting for the user to accept the Duo 2FA prompt.");
             try {
+                // We're now going to wait until the trust prompt shows up, which should happen
+                // once the user responds to the Duo push request.
                 await page.waitForSelector("#trust-browser-button", {
                     timeout: 42000
                 });
             } 
             catch (e) {
-                logNice(termLog, "Cannot find the 'Is this your device?' prompt.");
+                logNice(termLog, "Cannot find the 'Is this your device?' prompt. Did you accept the Duo request?");
                 console.info(e);
                 console.info();
                 return "";
             }
     
+            logNice(termLog, "Duo 2FA prompt responded to. Now telling Duo to trust this browser.");
+            await waitFor(1000);
+            // Once the button shows up, then press that button -- this is equivalent to the "Remember me
+            // for 7 days."
             await page.click("#trust-browser-button");
             logNice(termLog, "Clicked on 'Yes, this is my device' prompt.");
         }
+        else {
+            logNice(termLog, "'Go' button found. No 2FA needed.");
+        }
 
+        // Now, we can just wait until the 'Go' button shows up.
         try {
             await Promise.all([
                 page.waitForSelector("#startpage-select-term", {visible: true}),
