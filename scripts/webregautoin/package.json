@@ -11,6 +11,6 @@
   "author": "Edward Wang",
   "license": "MIT",
   "dependencies": {
-    "puppeteer": "^19.8.2"
+    "puppeteer": "^22.6.1"
   }
 }

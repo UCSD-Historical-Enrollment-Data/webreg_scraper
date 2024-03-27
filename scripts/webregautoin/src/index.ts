@@ -10,8 +10,8 @@ import * as path from "path";
 import * as puppeteer from "puppeteer";
 import * as http from "http";
 import { parseArgs } from 'node:util';
-import { PUSH, SMS, fetchCookies, getTermSeqId, logNice, printHelpMessage } from "./fns";
-import { IConfig, Context, ICredentials, ITermInfo } from "./types";
+import { PUSH, fetchCookies, getTermSeqId, logNice, printHelpMessage } from "./fns";
+import { IConfig, Context, ITermInfo } from "./types";
 
 async function main(): Promise<void> {
     const args = parseArgs({
@@ -60,25 +60,7 @@ async function main(): Promise<void> {
     }
 
     let context: Context;
-    if (config.settings.loginType === SMS) {
-        if (!config.settings.smsTokens || config.settings.smsTokens.length === 0) {
-            console.error("If your login type is 'sms' then you must provide SMS tokens.");
-            process.exit(1);
-        }
-
-        context = {
-            webreg: config.webreg,
-            session: {
-                start: 0,
-                callHistory: []
-            },
-            termInfo,
-            automaticPushEnabled: config.settings.automaticPushEnabled,
-            loginType: SMS,
-            tokens: config.settings.smsTokens
-        };
-    }
-    else if (config.settings.loginType === PUSH) {
+    if (config.settings.loginType === PUSH) {
         context = {
             webreg: config.webreg,
             session: {
