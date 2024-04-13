@@ -117,7 +117,7 @@ dependencies = [
 
 [[package]]
 name = "authmanager"
-version = "0.5.0-rc.4"
+version = "0.5.0"
 dependencies = [
  "basicauth",
  "clap",
@@ -1741,7 +1741,7 @@ dependencies = [
 
 [[package]]
 name = "webreg"
-version = "0.5.0-rc.5"
+version = "0.5.0"
 dependencies = [
  "anyhow",
  "axum",
