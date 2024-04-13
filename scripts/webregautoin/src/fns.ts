@@ -1,7 +1,6 @@
 import * as puppeteer from "puppeteer";
 import {Context, WebRegLoginResult} from "./types";
 
-export const SMS = "sms";
 export const PUSH = "push";
 
 export const NUM_ATTEMPTS_BEFORE_EXIT: number = 6;
@@ -154,19 +153,18 @@ export async function fetchCookies(ctx: Context, browser: puppeteer.Browser, isI
             await page.click('button[type="submit"]');
         }
 
-        // Wait for either Duo 2FA frame (if we need 2FA) or "Go" button (if no 2FA needed) to show up
-        logNice(termLog, "Waiting for Duo 2FA frame or 'Go' button to show up.");
-
+        // Wait for either Duo 2FA prompt (if we need 2FA) or "Go" button (if no 2FA needed) to show up
+        logNice(termLog, "Waiting for Duo 2FA prompt or 'Go' button to show up.");
 
         let loggedIn = false;
         const r: WebRegLoginResult = await Promise.race([
             // Either wait for the 'Go' button to show up, which implies that we
-            // have an authenticated session, **OR** wait for the Duo frame
+            // have an authenticated session, **OR** wait for the Duo prompt
             // to show up.
             //
             // If an error occurred, it means the 'Go' button could not be found
-            // after 30 seconds. This implies that the Duo frame could not be
-            // found since *if* the Duo frame did show up, then the error would
+            // after 30 seconds. This implies that the Duo prompt could not be
+            // found since *if* the Duo prompt did show up, then the error would
             // have never occurred.
 
             // Here, we wait for the 'Go' button (to load WebReg for a term) to
@@ -182,8 +180,8 @@ export async function fetchCookies(ctx: Context, browser: puppeteer.Browser, isI
                 loggedIn = true;
                 return WebRegLoginResult.LOGGED_IN;
             })(),
-            // Here, we *repeatedly* check to see if the Duo 2FA frame is visible AND some components of
-            // the frame (in our case, the "Remember Me" checkbox) are visible.
+            // Here, we *repeatedly* check to see if the Duo 2FA prompt is visible AND some components of
+            // the prompt (in our case, the "Other Option" button) are visible.
             (async () => {
                 const interval = await new Promise<NodeJS.Timeout>(r => {
                     const internalInterval = setInterval(async () => {
@@ -194,17 +192,14 @@ export async function fetchCookies(ctx: Context, browser: puppeteer.Browser, isI
                                 return;
                             }
 
-                            const possDuoFrame = await page.$("iframe[id='duo_iframe']");
-                            if (!possDuoFrame) {
+                            // Check if the header text is visible (Check for a Duo Push)
+                            const duoPrompt = await page.$("#header-text");
+                            if (!duoPrompt) {
                                 return;
                             }
 
-                            const duoFrame = await possDuoFrame.contentFrame();
-                            if (!duoFrame) {
-                                return;
-                            }
-
-                            if (!(await duoFrame.$("#remember_me_label_text"))) {
+                            // "Other Options" selector - is it visible?
+                            if (!(await page.$("#auth-view-wrapper > div:nth-child(2) > div.row.display-flex.other-options-link.align-flex-justify-content-center.size-margin-bottom-large.size-margin-top-small > a"))) {
                                 return;
                             }
 
@@ -235,125 +230,53 @@ export async function fetchCookies(ctx: Context, browser: puppeteer.Browser, isI
             continue;
         }
 
-        logNice(
-            termLog,
-            r === WebRegLoginResult.LOGGED_IN
-                ? "'Go' button found. No 2FA needed."
-                : "Duo 2FA frame found. Ignore the initial 2FA request; i.e., do not"
-                    + " accept the 2FA request until you are told to do so."
-        );
-
-        // Wait an additional 4 seconds to make sure everything loads up.
-        await waitFor(4 * 1000);
-
         // No go button means we need to log in.
         if (r === WebRegLoginResult.NEEDS_DUO) {
+            logNice(termLog, "Duo 2FA prompt required.");
+
+            // If we have already initialized this and we are asked to do a Duo 2FA prompt, then
+            // cancel.
             if (!isInit && ctx.loginType === PUSH) {
                 logNice(termLog, "Attempting to send request to Duo, but this wasn't supposed to happen");
                 throw new Error("ruby is bad");
             }
 
-            logNice(termLog, "Beginning Duo 2FA process. Do not accept yet.");
-            // Need to find a duo iframe so we can actually authenticate
-            const possDuoFrame = await page.$("iframe[id='duo_iframe']");
-            if (!possDuoFrame) {
-                logNice(termLog, "No possible Duo frame found. Returning empty string.");
+            logNice(termLog, "Accept the Duo 2FA prompt when you receive it. You may need to open the app.");
+            // Need to find the Duo prompt ("Check for a Duo Push") so we can actually authenticate
+            const duoPrompt = await page.$("#header-text");
+            if (!duoPrompt) {
+                logNice(termLog, "No possible Duo prompt found. Returning empty string.");
                 console.info();
                 throw new Error();
             }
 
-            const duoFrame = await possDuoFrame.contentFrame();
-            if (!duoFrame) {
-                logNice(termLog, "Duo frame not attached. Returning empty string.");
+            logNice(termLog, "Waiting for the user to accept the Duo 2FA prompt.");
+            try {
+                // We're now going to wait until the trust prompt shows up, which should happen
+                // once the user responds to the Duo push request.
+                await page.waitForSelector("#trust-browser-button", {
+                    timeout: 42000
+                });
+            } 
+            catch (e) {
+                logNice(termLog, "Cannot find the 'Is this your device?' prompt. Did you accept the Duo request?");
+                console.info(e);
                 console.info();
-                throw new Error();
+                return "";
             }
-
-            if (ctx.automaticPushEnabled) {
-                // it's possible that we might need to cancel our existing authentication request,
-                // especially if we have duo push automatically send upon logging in
-                await waitFor(1000);
-                const cancelButton = await duoFrame.$(".btn-cancel");
-                if (cancelButton) {
-                    await cancelButton.click();
-                    logNice(termLog, "Clicked the CANCEL button to cancel initial 2FA request. Do not respond to 2FA request.");
-                }
-            }
-
+    
+            logNice(termLog, "Duo 2FA prompt responded to. Now telling Duo to trust this browser.");
             await waitFor(1000);
-            // Remember me for 7 days
-            await duoFrame.click('#remember_me_label_text');
-            logNice(termLog, "Checked the 'Remember me for 7 days' box.");
-            await waitFor(1000);
-
-            if (ctx.loginType === SMS) {
-                // Click on the 'enter a passcode' button
-                await duoFrame.click("#passcode");
-                await waitFor(1500);
-                const smsCodeHint = await duoFrame.$("#auth_methods > fieldset > div.passcode-label.row-label > div > div");
-                if (!smsCodeHint) {
-                    logNice(termLog, "No SMS code hint found. That might be a problem.");
-                    console.info();
-                    throw new Error();
-                }
-
-                const smsPasscodeHint = await smsCodeHint.evaluate(elem => elem.textContent);
-                if (!smsPasscodeHint || !smsPasscodeHint.startsWith("Your next SMS Passcode starts with")) {
-                    logNice(termLog, "SMS code hint element found, but no text found or bad (ruby) text found.");
-                    console.info();
-                    throw new Error();
-                }
-
-                logNice(termLog, `Found SMS passcode hint '${smsPasscodeHint}'`);
-                const hint = smsPasscodeHint.split(" ").at(-1)!;
-                const codeToUse = ctx.tokens.find(token => token.startsWith(hint));
-                if (!codeToUse) {
-                    logNice(termLog, `No SMS code could not be found that satisfies the hint ('${smsPasscodeHint}')`);
-                    console.info();
-                    throw new Error();
-                }
-
-                logNice(termLog, `Code should start with number '${hint}'. Using code '${codeToUse}'`);
-                await waitFor(1500);
-                // Put the SMS code into the text box
-                const smsTextBox = await duoFrame.$("#auth_methods > fieldset > div.passcode-label.row-label > div > input");
-                if (!smsTextBox) {
-                    logNice(termLog, "Could not find the SMS text box to put your SMS token in.");
-                    console.info();
-                    throw new Error();
-                }
-
-                await smsTextBox.type(codeToUse.toString());
-                await waitFor(1500);
-
-                // Then, press the "Log In" button
-                await duoFrame.click("#passcode");
-                logNice(termLog, `Entered SMS code '${codeToUse}' and clicked the 'Log In' button.`);
-                await waitFor(1500);
-
-                try {
-                    // See if we used an incorrect code.
-                    // 
-                    // NOTE: If we have the correct code, then the frame will no longer exist, so a try/catch
-                    // is used to ensure that possibility happens.
-                    const frameContent = await duoFrame.content();
-                    if (frameContent.includes("Incorrect passcode. Enter a passcode from Duo Mobile or a text.")) {
-                        logNice(termLog, "The passcode is incorrect. This is so sad.");
-                        console.info();
-                        throw new Error();
-                    }
-                }
-                catch (_) {
-                    // conveniently ignore this error, too
-                }
-            }
-            else {
-                // Send me a push
-                await duoFrame.click('#auth_methods > fieldset > div.row-label.push-label > button');
-                logNice(termLog, "A Duo push was sent. Please respond to the new 2FA request.");
-            }
+            // Once the button shows up, then press that button -- this is equivalent to the "Remember me
+            // for 7 days."
+            await page.click("#trust-browser-button");
+            logNice(termLog, "Clicked on 'Yes, this is my device' prompt.");
+        }
+        else {
+            logNice(termLog, "'Go' button found. No 2FA needed.");
         }
 
+        // Now, we can just wait until the 'Go' button shows up.
         try {
             await Promise.all([
                 page.waitForSelector("#startpage-select-term", {visible: true}),
@@ -367,7 +290,7 @@ export async function fetchCookies(ctx: Context, browser: puppeteer.Browser, isI
             // Note that I used a try/catch in Promise.all instead of Promise.allSettled
             // because waitForSelector apparently throws the error instead of rejecting?
             // Not sure if there's a way to handle that without try/catch
-            logNice(termLog, "Could not find select term dropdown or Go button.");
+            logNice(termLog, "Cannot find the 'Is this your device?' prompt.");
             console.info(e);
             console.info();
             return "";
