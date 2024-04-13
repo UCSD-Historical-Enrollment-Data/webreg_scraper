@@ -14,13 +14,14 @@ That way, you don't need to worry about having to authenticate via Duo for the n
 ## Authentication Modes
 Prior to March 26, 2024, this script supported either Push or SMS mode. Now, because of the new 
 [Duo Universal Prompt](https://blink.ucsd.edu/technology/security/services/two-step-login/universal-prompt.html),
-only Push is supported. In any case, the authentication mode only matters at the beginning, during startup, since
-the login script needs to handle the authentication process.
+only Push is supported. 
 
-Push mode means that, when the script is starting up, the script will initially authenticate you using Duo Push.
+This script only supports Duo Push: when the script is starting up, the script will initially authenticate you using Duo Push.
 
 Keep in mind that you'll need to restart the login script setup process every 6-7 days to ensure you can still keep 
 yourself logged in. 
+
+~~Also, Ruby is a clown~~
 
 ## Requirements
 In order to ensure that you _can_ use this script, ensure that the following technical and non-technical requirements
@@ -89,9 +90,12 @@ To actually run this script, follow the directions below.
 The sample configuration file will have the following layout:
 - `webreg.username` (`string`): Your UCSD Active Directory username.
 - `webreg.password` (`string`): Your UCSD Active Directory password.
-- `settings.loginType` (`push`): The login process you want to use. This can only be `push`.
+- `settings.loginType` (`push`): The login process you want to use. This should only be `push`.
 - `settings.automaticPushEnabled` (`boolean`): Whether your account is configured to automatically sends a Duo Push on 
   login. If this value is `true`, then the login script will cancel the automatic push when setting itself up. 
+
+> [!NOTE]
+> `settings.automaticPushEnabled` is no longer in use by the script, and will be deprecated in a later version.
 
 ### Duo Push
 ```json
