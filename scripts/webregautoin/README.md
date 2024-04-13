@@ -88,7 +88,7 @@ To actually run this script, follow the directions below.
 The sample configuration file will have the following layout:
 - `webreg.username` (`string`): Your UCSD Active Directory username.
 - `webreg.password` (`string`): Your UCSD Active Directory password.
-- `settings.loginType` (`sms` or `push`): The login process you want to use. This can only be `sms` or `push`.
+- `settings.loginType` (`push`): The login process you want to use. This can only be `push`.
 - `settings.automaticPushEnabled` (`boolean`): Whether your account is configured to automatically sends a Duo Push on 
   login. If this value is `true`, then the login script will cancel the automatic push when setting itself up. 
 
