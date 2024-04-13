@@ -14,7 +14,8 @@ That way, you don't need to worry about having to authenticate via Duo for the n
 ## Authentication Modes
 Prior to March 26, 2024, this script supported either Push or SMS mode. Now, because of the new 
 [Duo Universal Prompt](https://blink.ucsd.edu/technology/security/services/two-step-login/universal-prompt.html),
-only Push is supported. The authentication mode only matters at the beginning.
+only Push is supported. In any case, the authentication mode only matters at the beginning, during startup, since
+the login script needs to handle the authentication process.
 
 Push mode means that, when the script is starting up, the script will initially authenticate you using Duo Push.
 
