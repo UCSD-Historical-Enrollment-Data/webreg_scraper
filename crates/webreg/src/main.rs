@@ -86,7 +86,7 @@ async fn main() -> ExitCode {
 ///
 /// # Parameters
 /// - `state`: The wrapper state, which is a reference to all valid scrapers and other relevant
-/// information.
+///   information.
 async fn shutdown_signal(state: Arc<WrapperState>) {
     tokio::signal::ctrl_c()
         .await
