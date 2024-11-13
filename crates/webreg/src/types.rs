@@ -73,7 +73,6 @@ impl WrapperState {
                     num_requests: Default::default(),
                     total_time_spent: Default::default(),
                 },
-                should_save: data.save_data_to_file,
             })
             .map(|data| (data.term.to_owned(), Arc::new(data)))
             .collect();
@@ -167,8 +166,6 @@ pub struct TermInfo {
     pub search_query: Vec<SearchRequestBuilder>,
     /// Tracker stats. This field contains information on the performance of the scraper.
     pub tracker: StatTracker,
-    /// Whether we should save data scraped for this term to a file.
-    pub should_save: bool,
 }
 
 /// A structure that represents a configuration file specifically for the scraper. See the

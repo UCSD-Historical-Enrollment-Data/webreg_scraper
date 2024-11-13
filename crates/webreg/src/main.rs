@@ -74,8 +74,8 @@ async fn main() -> ExitCode {
         state.api_base_endpoint.port
     );
 
-    axum::Server::bind(&addr.unwrap())
-        .serve(create_router(state.clone()).into_make_service())
+    let listener = tokio::net::TcpListener::bind(&addr.unwrap()).await.unwrap();
+    axum::serve(listener, create_router(state.clone()).into_make_service())
         .with_graceful_shutdown(shutdown_signal(state))
         .await
         .unwrap();
@@ -86,7 +86,7 @@ async fn main() -> ExitCode {
 ///
 /// # Parameters
 /// - `state`: The wrapper state, which is a reference to all valid scrapers and other relevant
-/// information.
+///   information.
 async fn shutdown_signal(state: Arc<WrapperState>) {
     tokio::signal::ctrl_c()
         .await

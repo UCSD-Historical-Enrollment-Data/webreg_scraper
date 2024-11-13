@@ -1,6 +1,6 @@
 [package]
 name = "webreg"
-version = "0.5.0"
+version = "0.5.1"
 authors = ["Edward Wang"]
 edition = "2021"
 description = "A scraper and API for UC San Diego's WebReg enrollment system."
@@ -8,19 +8,19 @@ repository = "https://github.com/ewang2002/webreg_scraper"
 
 [dependencies]
 anyhow = "1.0"
-axum = "0.6"
+axum = "0.7"
 chrono = "0.4"
 futures = "0.3"
-reqwest = "0.11"
+reqwest = "0.12"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-tokio = { version = "1.17", features = ["rt-multi-thread", "macros", "signal"] }
+tokio = { version = "1.41", features = ["rt-multi-thread", "macros", "signal"] }
 tracing = "0.1"
 tracing-subscriber = "0.3"
 webweg = { version = "0.9", features = ["multi"] }
 basicauth = { path = "../basicauth", optional = true }
 [dev-dependencies]
-axum-macros = "0.3"
+axum-macros = "0.4"
 
 [features]
 default = []

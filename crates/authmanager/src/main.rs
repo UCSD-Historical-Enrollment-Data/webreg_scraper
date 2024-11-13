@@ -52,9 +52,9 @@ fn main() {
         CliSubCmd::ShowAll { show_tokens } => {
             let mut table_builder = Builder::new();
             if show_tokens.unwrap_or(false) {
-                table_builder.set_header(["Prefix", "Token", "Created", "Expired", "Description"]);
+                table_builder.push_record(["Prefix", "Token", "Created", "Expired", "Description"]);
             } else {
-                table_builder.set_header(["Prefix", "Created", "Expired", "Description"]);
+                table_builder.push_record(["Prefix", "Created", "Expired", "Description"]);
             }
 
             let entries = manager.get_all_entries();

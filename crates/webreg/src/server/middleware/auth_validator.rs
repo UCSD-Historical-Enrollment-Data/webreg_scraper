@@ -1,6 +1,6 @@
 use crate::types::WrapperState;
-use axum::extract::State;
-use axum::http::{header, Request, StatusCode};
+use axum::extract::{Request, State};
+use axum::http::{header, StatusCode};
 use axum::middleware::Next;
 use axum::response::IntoResponse;
 use axum::Json;
@@ -10,10 +10,10 @@ use std::sync::Arc;
 use tracing::log::{info, warn};
 
 #[tracing::instrument(skip(state, req, next))]
-pub async fn auth<B>(
+pub async fn auth(
     State(state): State<Arc<WrapperState>>,
-    mut req: Request<B>,
-    next: Next<B>,
+    mut req: Request,
+    next: Next,
 ) -> Result<impl IntoResponse, (StatusCode, Json<Value>)> {
     info!("Auth middleware invoked.");
     let token = req
