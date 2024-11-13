@@ -59,7 +59,6 @@ pub fn create_router(app_state: Arc<WrapperState>) -> Router {
     // Live WebReg router.
     let webreg_router = Router::new()
         .merge(parsed_router)
-        .route("/terms", get(ww_general::get_all_terms))
         .layer(mw::from_fn_with_state(
             app_state.clone(),
             running_validator::validate_wrapper_running,
@@ -68,6 +67,7 @@ pub fn create_router(app_state: Arc<WrapperState>) -> Router {
     let router = Router::new()
         .route("/health", get(status::get_health))
         .nest("/live/:term", webreg_router)
+        .route("/terms", get(ww_general::get_all_terms))
         .route("/timing/:term", get(status::get_timing_stats))
         .route("/login_stat/:stat", get(status::get_login_script_stats))
         .with_state(app_state.clone());
