@@ -2,8 +2,8 @@
 
 use std::sync::Arc;
 
-use axum::extract::{Path, State};
-use axum::http::{Request, StatusCode};
+use axum::extract::{Path, State, Request};
+use axum::http::StatusCode;
 use axum::middleware::Next;
 use axum::response::IntoResponse;
 use axum::Json;
@@ -15,11 +15,11 @@ use crate::types::WrapperState;
 /// A middleware function that validates a term that's passed as part of the path
 /// is supported by the server.
 #[tracing::instrument(skip(state, req, next))]
-pub async fn validate_term<B>(
+pub async fn validate_term(
     Path(term): Path<String>,
     State(state): State<Arc<WrapperState>>,
-    req: Request<B>,
-    next: Next<B>,
+    req: Request,
+    next: Next,
 ) -> Result<impl IntoResponse, (StatusCode, Json<Value>)> {
     info!("Validating if term is supported.");
     let term = term.to_uppercase();

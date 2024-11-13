@@ -74,8 +74,8 @@ async fn main() -> ExitCode {
         state.api_base_endpoint.port
     );
 
-    axum::Server::bind(&addr.unwrap())
-        .serve(create_router(state.clone()).into_make_service())
+    let listener = tokio::net::TcpListener::bind(&addr.unwrap()).await.unwrap();
+    axum::serve(listener, create_router(state.clone()).into_make_service())
         .with_graceful_shutdown(shutdown_signal(state))
         .await
         .unwrap();
