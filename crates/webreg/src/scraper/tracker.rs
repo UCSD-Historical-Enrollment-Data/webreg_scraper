@@ -106,7 +106,7 @@ async fn track_webreg_enrollment(
 ) {
     let mut writer = {
         let file_name = format!(
-            "enrollment_{}_{}.csv",
+            "/data/enrollment_{}_{}.csv",
             chrono::offset::Local::now().format("%FT%H_%M_%S"),
             info.term.as_str()
         );

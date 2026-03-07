@@ -34,9 +34,22 @@ about them, just click on the script name.
 This program _requires_ the `webregautoin` helper program.
 
 ## Setup
-To run this project, feel free to explore the individual scripts or crates above; setup guides for each are provided.
 
-If you want to get an Ubuntu environment ready with all the necessary files needed to run this project, you can run the setup script in the [`setup`](https://github.com/ewang2002/webreg_scraper/tree/master/setup) folder. More information will be provided there.
+The recommended way to run the scraper is via Docker, as it abstracts away all
+the dependency management and setup. You can find the Docker setup guide in the 
+[`docker`](./docker/) directory.
+
+Feel free to explore the individual scripts or crates above. 
+
+If you want to run the scraper without Docker, you can follow the instructions in 
+the respective README files for the scripts and crates.  
+
+
+> [!NOTE]
+> You can also run the setup script in the [`setup`](https://github.com/ewang2002/webreg_scraper/tree/master/setup) 
+> folder. More information will be provided there. Do note that some of the packages
+> that the script installs are deprecated and may cause issues. The script is tested 
+> to work on Ubuntu 23.04.
 
 ## License
 Everything in this repository is licensed under the MIT license.

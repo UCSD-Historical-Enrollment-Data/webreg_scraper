@@ -12,6 +12,38 @@ import * as http from "http";
 import { parseArgs } from 'node:util';
 import { PUSH, fetchCookies, getTermSeqId, logNice, printHelpMessage } from "./fns";
 import { IConfig, Context, ITermInfo } from "./types";
+import { createInterface } from "readline";
+import { Writable } from "stream";
+import prompts = require("prompts");
+
+async function credentialPrompt() {
+    console.log("\n============================================================");
+    console.log(" Waiting for credentials.");
+    console.log(" If running detached, attach to this container to continue.");
+    console.log("============================================================\n");
+
+    const response = await prompts([
+        {
+            type: 'text',
+            name: 'username',
+            message: 'Enter your TritonLink Username:'
+        },
+        {
+            type: 'password',
+            name: 'password',
+            message: 'Enter your TritonLink Password:',
+            mask: '*' 
+        }
+    ]);
+
+    console.log("\nCredentials saved to RAM. Starting server...");
+    
+    return { 
+        username: response.username, 
+        password: response.password 
+    };
+}
+
 
 async function main(): Promise<void> {
     const args = parseArgs({
@@ -44,8 +76,26 @@ async function main(): Promise<void> {
         headless: !debug
     });
 
-    const config: IConfig = JSON.parse(
-        fs.readFileSync(path.join(__dirname, "..", "credentials.json")).toString());
+    // moved to env vars for "better" security (not really, but it's something)
+    let username = process.env.WEBREG_USERNAME || "";
+    let password = process.env.WEBREG_PASSWORD || "";
+
+    if (!username || !password) {
+        const credentials = await credentialPrompt();
+        username = credentials.username;
+        password = credentials.password;
+    }
+
+    const config: IConfig = {
+        webreg: {
+            username: username,
+            password: password
+        },
+        settings: {
+            loginType: process.env.LOGIN_TYPE || "push",
+            automaticPushEnabled: process.env.AUTOMATIC_PUSH_ENABLED === "true"
+        }
+    };
 
     const term = args.values.term?.toUpperCase();
     let termInfo: ITermInfo | null = null;
@@ -77,8 +127,29 @@ async function main(): Promise<void> {
         process.exit(1);
     }
 
+    let isReady = false;
+
     // Very basic server.
     const server = http.createServer(async (req, res) => {
+        if (req.url === "/healthy") {
+            if (isReady) {
+                res.writeHead(200, { "Content-Type": "application/json" });
+                res.end(
+                    JSON.stringify({
+                        status: "ok"
+                    })
+                );
+            } else {
+                res.writeHead(503, { "Content-Type": "application/json" });
+                res.end(
+                    JSON.stringify({
+                        status: "waiting for login"
+                    })
+                );
+            }
+            return;
+        }
+
         if (req.method !== "GET") {
             res.end(
                 JSON.stringify({
@@ -126,7 +197,15 @@ async function main(): Promise<void> {
     }
 
     // Initial warmup call.
-    await fetchCookies(context, browser, true);
+    try {
+        logNice("Init", "Performing initial health check...");
+        await fetchCookies(context, browser, true);
+        isReady = true;
+    } catch (e) {
+        logNice("Init", "Health check failed. Restart container and try again.");
+        logNice("Init", "Error details:");
+        console.error(e);
+    }
 }
 
 main().then();

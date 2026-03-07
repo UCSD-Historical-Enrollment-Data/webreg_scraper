@@ -11,6 +11,10 @@
   "author": "Edward Wang",
   "license": "MIT",
   "dependencies": {
+    "prompts": "^2.4.2",
     "puppeteer": "^22.6.1"
+  },
+  "devDependencies": {
+    "@types/prompts": "^2.4.9"
   }
 }

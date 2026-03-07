@@ -39,7 +39,7 @@ are satisfied.
 ### Technical
 - You'll need to have [Node.js](https://nodejs.org/en/) installed. The long term support (LTS) version will do.
 - If you're using Ubuntu, you'll also need to ensure that the following system dependencies are installed.
-    ```
+    ```bash
     sudo apt-get update
     sudo apt install libgtk-3-dev libnotify-dev libgconf-2-4 libnss3 libxss1 libasound2
     ```
@@ -48,65 +48,49 @@ are satisfied.
 ## Setup
 To actually run this script, follow the directions below.
 
-1. A sample configuration file has been provided for you: `credentials.example.json`.
-    1. Rename this file to `credentials.json`.
-    2. Open the file and fill in your UC San Diego Active Directory username and password.
-    3. Modify any other relevant settings (see the next section on the configuration file for more on this).
-    4. Save your changes.
-
-2. Next, install TypeScript globally:
-    ```
+1. Install TypeScript globally:
+    ```bash
     npm i -g typescript 
     ```
    As the script is written in TypeScript, you need to install TypeScript to "compile" the script.
 
-3. Install the project dependencies that this script needs using the command:
-    ```
+2. Install the project dependencies that this script needs using the command:
+    ```bash
     npm i
     ```
 
-4. Run the following command to compile the script:
-    ```
+3. Run the following command to compile the script:
+    ```bash
     npm run compile
     ```
    This is an alias for the command `tsc -p .`, which is defined in the `package.json` file.
 
-5. At this point, you should see an `out` folder. In the `out` folder, you should have an `index.js` file. You can
-   run the command like so:
-    ```
-    node index.js --port <port>
+4. At this point, you should see an `out` folder. In the `out` folder, you should have an `index.js` file. You must provide your credentials via environment variables to run the script securely. You can run the command inline like so:
+    ```bash
+    WEBREG_USERNAME="your_username" WEBREG_PASSWORD="your_password" node out/index.js --port <port>
     ```
     where
-    - `port` is the port where this script should be "visible" to the scraper. Usually, I put a number like `3001` or
-      `4000`.
+    - `port` is the port where this script should be "visible" to the scraper. Usually, I put a number like `3001` or `4000`.
+    
+    Alternatively, export the variables to your shell first:
+    ```bash
+    export WEBREG_USERNAME="your_username"
+    export WEBREG_PASSWORD="your_password"
+    node out/index.js --port 3001
+    ```
 
-    When running the command for the first time, follow the directions that are presented. After initial setup is 
-    complete, then the script is ready to serve future login requests.
+    When running the command for the first time, follow the directions that are presented in the console. After initial setup is complete, the script is ready to serve future login requests.
 
 > **Warning:**
 > If you use `push` mode, you'll need to repeat this process every 6-7 days to ensure your scraper runs uninterrupted.
 
-## Configuration File Layout
-The sample configuration file will have the following layout:
-- `webreg.username` (`string`): Your UCSD Active Directory username.
-- `webreg.password` (`string`): Your UCSD Active Directory password.
-- `settings.loginType` (`push`): The login process you want to use. This should only be `push`.
-- `settings.automaticPushEnabled` (`boolean`): Whether your account is configured to automatically sends a Duo Push on 
-  login. If this value is `true`, then the login script will cancel the automatic push when setting itself up. 
+## Environment Variables
+The script relies on the following environment variables for configuration instead of a hardcoded JSON file:
+
+- `WEBREG_USERNAME` (**Required**): Your UCSD Active Directory username.
+- `WEBREG_PASSWORD` (**Required**): Your UCSD Active Directory password.
+- `LOGIN_TYPE` (*Optional*): The login process you want to use. Defaults to `push`. This should currently only be `push`.
+- `AUTOMATIC_PUSH_ENABLED` (*Optional*): Whether your account is configured to automatically send a Duo Push on login. Accepts `"true"` or `"false"`. 
 
 > [!NOTE]
-> `settings.automaticPushEnabled` is no longer in use by the script, and will be deprecated in a later version.
-
-### Duo Push
-```json
-{
-    "webreg": {
-        "username": "",
-        "password": ""
-    },
-    "settings": {
-        "loginType": "push",
-        "automaticPushEnabled": true
-    }
-}
-```
+> `AUTOMATIC_PUSH_ENABLED` is largely a legacy setting and will be deprecated in a later version due to Universal Prompt changes.

@@ -1,0 +1,39 @@
+services:
+  login:
+    build: ./login
+    container_name: login
+    stdin_open: true
+    tty: true
+    shm_size: '1gb'
+    ports:
+      - "3000:3000"
+    networks:
+      scraper_net:
+        ipv4_address: 172.20.0.10
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/healthy"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 10s
+
+
+  scraper:
+    build: ./scraper
+    container_name: scraper
+    restart: unless-stopped
+    depends_on:
+      login:
+        condition: service_healthy
+    networks:
+      scraper_net:
+        ipv4_address: 172.20.0.20
+    volumes:
+      - ./data:/data
+
+networks:
+  scraper_net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
