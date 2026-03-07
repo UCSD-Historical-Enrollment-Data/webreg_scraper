@@ -97,7 +97,7 @@ pub async fn run_tracker(state: Arc<WrapperState>, verbose: bool) {
 /// - `info`: The term information.
 /// - `verbose`: Whether logging should be verbose.
 /// - `current_loop_stop_flag`: Whether to stop any further requests for this function call
-///                             instance.
+///   instance.
 async fn track_webreg_enrollment(
     state: &Arc<WrapperState>,
     info: &TermInfo,
