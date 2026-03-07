@@ -36,7 +36,7 @@ pub fn parse_grade_option_unit_count(
 ///
 /// # Returns
 /// The `PlanAdd` object.
-pub fn build_add_plan_object(body: &BodyPlanAdd) -> PlanAdd {
+pub fn build_add_plan_object(body: &BodyPlanAdd) -> PlanAdd<'_> {
     let (grading_option, unit_count) =
         parse_grade_option_unit_count(&body.grading_option, Some(body.unit_count));
 
@@ -62,7 +62,7 @@ pub fn build_add_plan_object(body: &BodyPlanAdd) -> PlanAdd {
 ///
 /// # Returns
 /// The `EnrollWaitAdd` object.
-pub fn build_add_section_object(body: &BodyAddInfo) -> EnrollWaitAdd {
+pub fn build_add_section_object(body: &BodyAddInfo) -> EnrollWaitAdd<'_> {
     let (grading_option, unit_count) =
         parse_grade_option_unit_count(&body.grading_option, body.unit_count);
 
